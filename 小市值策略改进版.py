@@ -1,6 +1,6 @@
 #策略概述：《小市值策略改进版》
 #https://www.joinquant.com/post/2035?tag=new
-#1.选择eps>0的所有股票，按市值从小到大排序，选择前100支候选
+#1.选择动态市盈率>0且<80的所有股票，按市值从小到大排序，选择前100支候选
 #2.剔除创业板，ST,*,退，停牌等股票
 #3.选择市值最小的20只（前20只）候选
 #4.给候选股票评分, 每天下午2点50分执行。
@@ -20,8 +20,7 @@
 ################################################################################
 #9.根据不同的时间段设置滑点与手续费
 #10.剔除创业板
-#11.剔除esp>=80的股票
-
+#11.剔除当期及环比上期每股收益(EPS）<0且增长率低于20%的股票
 
 from sqlalchemy import desc
 import numpy as np
@@ -74,6 +73,8 @@ def Multi_Select_Stocks(context, data):
 
     q = query(
         valuation.code,
+        indicator.eps,
+        indicator.statDate,
         ).filter(
         (valuation.pe_ratio > 0) & (valuation.pe_ratio < 80),
         valuation.code.in_(stocks)
@@ -81,11 +82,36 @@ def Multi_Select_Stocks(context, data):
         # 按市值升序排列
         valuation.market_cap.asc()
     ).limit(
-        # 最多返回20个
-        20
+        # 最多返回100个
+        100
     )
     df = get_fundamentals(q)
-    stocks = df.code.values
+
+    # 循环处理剔除当期及环比上期每股收益(EPS）<0且增长率低于20%的股票
+    stocks=[]
+    for i in range(0, len(df)):
+        issue_date = datetime.datetime.strptime(df.statDate[i],'%Y-%m-%d')
+        # 计算环比上期发布每股收益(EPS）的日期
+        year_before = issue_date.replace(year=issue_date.year-1).strftime('%Y-%m-%d')
+        q1 = query(
+            indicator.code,
+            indicator.eps,
+            ).filter(
+            indicator.code == df.code[i]
+        )
+        df1 = get_fundamentals(q1, date=year_before)
+        if len(df1)>0 and (not isnan(df.eps[i])) and (not isnan(df1.eps[0])):
+            latestEPS = string.atof(df.eps[i])
+            yearbeforeEPS = string.atof(df1.eps[0])
+            # 判断当期及环比上期每股收益(EPS）<0且增长率低于20%
+            if (latestEPS > 0) and (yearbeforeEPS > 0) and (latestEPS/yearbeforeEPS >= 1.20):
+                stocks.append(df.code.values[i])
+                # 满20支备选股票则结束筛选
+                if len(stocks) >= 20:
+                    break
+    # 备选股票池空，可能是无环比上期财务数据，则直接使用之前筛选的股票
+    if len(stocks) <= 0:
+        stocks = df.code.values
 
     stock_select={}
     for s in stocks:
