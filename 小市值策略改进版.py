@@ -1,6 +1,6 @@
 #策略概述：《小市值策略改进版》
 #https://www.joinquant.com/post/2035?tag=new
-#1.选择eps>0的所有股票，按市值从小到大排序，选择前100支候选
+#1.选择动态市盈率>0的所有股票，按市值从小到大排序，选择前100支候选
 #2.剔除创业板，ST,*,退，停牌等股票
 #3.选择市值最小的20只（前20只）候选
 #4.给候选股票评分, 每天下午2点50分执行。
@@ -20,7 +20,6 @@
 ################################################################################
 #9.根据不同的时间段设置滑点与手续费
 #10.剔除创业板
-#11.剔除esp>=80的股票
 
 
 from sqlalchemy import desc
@@ -75,7 +74,7 @@ def Multi_Select_Stocks(context, data):
     q = query(
         valuation.code,
         ).filter(
-        (valuation.pe_ratio > 0) & (valuation.pe_ratio < 80),
+        valuation.pe_ratio > 0,
         valuation.code.in_(stocks)
     ).order_by(
         # 按市值升序排列
