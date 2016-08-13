@@ -17,6 +17,9 @@
 #关于止损策略，我有点说漏了。
 #仓位股票使用跟踪止损，每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉，当天14：50马上重新选股持仓。
 #8.识别大盘“三只乌鸦”的形态，如果发现，当天就清仓。
+################################################################################
+#9.根据不同的时间段设置滑点与手续费
+#10.剔除创业板
 
 
 from sqlalchemy import desc
@@ -27,8 +30,6 @@ from scipy import stats
 def initialize(context):
     # 对比标的
     set_benchmark('000300.XSHG') 
-    # 设置佣金
-    set_commission(PerTrade(buy_cost=0.0003, sell_cost=0.0003, min_cost=5))
     g.stocks = []
     g.stockCount = 4
     g.buyStockCount = 10
@@ -44,11 +45,12 @@ def unpaused(stockspool):
     current_data=get_current_data()
     return [s for s in stockspool if not current_data[s].paused]    
 
-#过滤掉带*或者ST类股票
+#过滤掉带*或者ST类及创业板股票
 def filterStarName(stock_list):
     curr_data = get_current_data()
     return  [stock for stock in stock_list if 'ST' not in curr_data[stock].name and
-        '*' not in curr_data[stock].name and '退' not in curr_data[stock].name]
+        '*' not in curr_data[stock].name and '退' not in curr_data[stock].name and 
+        not stock.startswith('300')]
 
 def sell_all_stocks(context):
     for stock in context.portfolio.positions.keys():
@@ -68,11 +70,11 @@ def Multi_Select_Stocks(context, data):
     stocks = list(st[st==False].index)
     stocks = unpaused(stocks)
     stocks = filterStarName(stocks)
-    
+
     q = query(
         valuation.code,
         ).filter(
-        valuation.pe_ratio > 0,
+        (valuation.pe_ratio > 0) & (valuation.pe_ratio < 80),
         valuation.code.in_(stocks)
     ).order_by(
         # 按市值升序排列
@@ -83,7 +85,7 @@ def Multi_Select_Stocks(context, data):
     )
     df = get_fundamentals(q)
     stocks = df.code.values
-    
+
     stock_select={}
     for s in stocks:
         h = attribute_history(s, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
@@ -138,6 +140,7 @@ def handle_data(context, data):
             sell_all_stocks(context)            
     
 	if isThreeBlackCrows('000016.XSHG', data):
+		print ('三只乌鸦，清仓')
 		sell_all_stocks(context)
 
 def buy_stocks(context, data):
@@ -193,3 +196,21 @@ def isThreeBlackCrows(stock, data):
             if closeArray[0]/closeArray1[0]-1>0:
                 return True
     return False
+
+#================================================================================
+#每天开盘前
+#================================================================================
+def before_trading_start(context):
+    # 将滑点设置为0
+    set_slippage(FixedSlippage(0)) 
+    # 根据不同的时间段设置手续费
+    dt=context.current_dt
+    # 设置手续费，每笔交易时的手续费是, 买入时券商佣金，卖出时券商佣金加千分之一印花税, 每笔交易最低扣5块钱
+    if dt>datetime.datetime(2013,1, 1):
+        set_commission(PerTrade(buy_cost=0.00025, sell_cost=0.00125, min_cost=5)) 
+    elif dt>datetime.datetime(2011,1, 1):
+        set_commission(PerTrade(buy_cost=0.001, sell_cost=0.002, min_cost=5))
+    elif dt>datetime.datetime(2009,1, 1):
+        set_commission(PerTrade(buy_cost=0.002, sell_cost=0.003, min_cost=5))
+    else:
+        set_commission(PerTrade(buy_cost=0.003, sell_cost=0.004, min_cost=5))
