@@ -20,6 +20,7 @@
 ################################################################################
 #9.根据不同的时间段设置滑点与手续费
 #10.剔除创业板
+#11.剔除esp>=80的股票
 
 
 from sqlalchemy import desc
@@ -106,7 +107,14 @@ def handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
-    
+
+    if isThreeBlackCrows('000016.XSHG', data):
+        if context.portfolio.positions:
+            #有仓位就清仓
+    		print ('三只乌鸦，清仓')
+    		sell_all_stocks(context)
+		return
+
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
         lag = 20 # 回看前20天
@@ -138,10 +146,6 @@ def handle_data(context, data):
         else :
             print('清仓')
             sell_all_stocks(context)            
-    
-	if isThreeBlackCrows('000016.XSHG', data):
-		print ('三只乌鸦，清仓')
-		sell_all_stocks(context)
 
 def buy_stocks(context, data):
     g.days += 1
@@ -168,7 +172,9 @@ def buy_stocks(context, data):
             if stock not in g.stocks:
                 print('Rank Outof 10, Sell: ',stock)
                 if order_target_value(stock, 0)==None :
+                    #售出股票失败，则计数加1
                     cntSuspension +=1
+        #由于可能出现售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，是股票数保持4个
         g.stocks = g.stocks[:len(g.stocks)-cntSuspension]
         
         valid_count = 0
@@ -177,6 +183,7 @@ def buy_stocks(context, data):
                 valid_count = valid_count + 1
         # place equally weighted orders
         if len(g.stocks) == 0 or valid_count >= len(g.stocks):
+            #已有股票数量>=4个，则直接返回
             return
         
         for stock in g.stocks:
