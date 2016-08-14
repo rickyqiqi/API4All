@@ -18,8 +18,11 @@
 #仓位股票使用跟踪止损，每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉，当天14：50马上重新选股持仓。
 #8.识别大盘“三只乌鸦”的形态，如果发现，当天就清仓。
 ################################################################################
+#2016/8/13
 #9.根据不同的时间段设置滑点与手续费
 #10.剔除创业板
+#11.删除了“三只乌鸦”形态识别
+#12.修改了中小板指数替代创业板指数作为二八中的八参照
 
 
 from sqlalchemy import desc
@@ -107,13 +110,6 @@ def handle_data(context, data):
     hour = context.current_dt.hour
     minute = context.current_dt.minute
 
-    if isThreeBlackCrows('000016.XSHG', data):
-        if context.portfolio.positions:
-            #有仓位就清仓
-    		print ('三只乌鸦，清仓')
-    		sell_all_stocks(context)
-		return
-
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
         lag = 20 # 回看前20天
@@ -121,7 +117,7 @@ def handle_data(context, data):
         value = context.portfolio.portfolio_value
         
         zs2 =  '000016.XSHG' #上证50指数
-        zs8 =  '399006.XSHE' #创业板指数
+        zs8 =  '399005.XSHE' #中小板指数
     
         hs2 = getStockPrice(zs2, lag)
         hs8 = getStockPrice(zs8, lag)
@@ -187,21 +183,6 @@ def buy_stocks(context, data):
         
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
-
-def isThreeBlackCrows(stock, data):
-    his =  attribute_history(stock, 2, '1d', ('close','open'), skip_paused=True, df=False)
-    closeArray = list(his['close'])
-    closeArray.append(data[stock].close)
-    openArray = list(his['open'])
-    openArray.append(get_current_data()[stock].day_open)
-#    if closeArray[0]-0.045:
-    if closeArray[0]<openArray[0] and closeArray[1]<openArray[1] and closeArray[2]<openArray[2]:
-        if closeArray[-1]/closeArray[0]-1>-0.045:
-            his =  attribute_history(stock, 4, '1d', ('close','open'), skip_paused=True, df=False)
-            closeArray1 = his['close']
-            if closeArray[0]/closeArray1[0]-1>0:
-                return True
-    return False
 
 #================================================================================
 #每天开盘前
