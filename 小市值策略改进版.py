@@ -39,6 +39,7 @@ def initialize(context):
     g.buyStockCount = 10
     g.days = 0
     g.period = 3
+    g.maxrbstd = {}
     
 
 def getStockPrice(stock, interval):
@@ -134,7 +135,7 @@ def stock_monitor(context, data, stock):
     dr3cur = (data[stock].close-h.close[-3])/h.close[-3]
     if dr3cur >= maxr:
         return 'TargetProfitArrived'
-    if dr3cur <= maxd:
+    if dr3cur <= bstd:
         return 'StopProfitArrived'
     return 'NormalProfit'
 
@@ -147,13 +148,14 @@ def handle_data(context, data):
     # 检查止盈止损条件，并操作股票
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
-            profitStatus = stock_monitor(context, data, stock)
-            if profitStatus == 'TargetProfitArrived':
-                print('止盈: ')
+            # 当前价格超出止盈止损值，则卖出该股票
+            dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
+            if dr3cur <= g.maxrbstd[stock]['bstd']:
+                print('止损: ')
                 order_target_value(stock, 0)
                 print('Sell: ',stock)
-            elif profitStatus == 'StopProfitArrived':
-                print('止损: ')
+            elif dr3cur >= g.maxrbstd[stock]['maxr']:
+                print('止盈: ')
                 order_target_value(stock, 0)
                 print('Sell: ',stock)
 
@@ -185,6 +187,7 @@ def handle_data(context, data):
         if ret2>0.01 or ret8>0.01 :   
             print('持有，每3天进行调仓')
             buy_stocks(context, data)
+            update_maxr_bstd(context)
         else :
             print('清仓')
             sell_all_stocks(context)            
@@ -199,8 +202,8 @@ def buy_stocks(context, data):
         g.stocks = []
         for stock in buylist:
             #排除符合止盈止损条件的股票
-            if stock_monitor(context, data, stock) != 'NormalProfit':
-                break
+            #if stock_monitor(context, data, stock) != 'NormalProfit':
+            #    break
             if data[stock].low_limit < data[stock].close < data[stock].high_limit :
                 g.stocks.append(stock)
             #已持有的涨停股，继续持有    
@@ -234,6 +237,35 @@ def buy_stocks(context, data):
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
 
+def update_maxr_bstd(context):
+    g.maxrbstd = {}
+    for stock in g.stocks:
+        # maxd = 个股250天内最大的3日跌幅
+        # avgd = 个股250天内平均的3日跌幅
+        # bstd = (maxd+avgd)/2, 此bstd即为个股在持仓3天内，能承受的最大跌幅
+        # maxr = 个股250天内最大的3日涨幅，个股盈利超过其历史值maxr的时候，则立刻清仓止盈
+        h = attribute_history(stock, 250, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
+        maxr = 0.00
+        maxd = 0.00
+        avgd = 0.00
+        dcount = 0
+        for i in range(1, len(h)-3):
+            # 个股连续3日涨跌幅
+            dr3days = 0.00
+            if (not isnan(h.close[i+2])) and (not isnan(h.close[i-1])):
+                dr3days = (h.close[i+2]-h.close[i-1])/h.close[i-1]
+            if dr3days > maxr:
+                maxr = dr3days
+            if dr3days < maxd:
+                maxd = dr3days
+            if dr3days < 0:
+                avgd += dr3days
+                dcount += 1
+        avgd = avgd/dcount
+        bstd = (maxd+avgd)/2
+
+        g.maxrbstd[stock] = {'maxr': maxr, 'bstd': bstd}
+
 #================================================================================
 #每天开盘前
 #================================================================================
@@ -251,3 +283,6 @@ def before_trading_start(context):
         set_commission(PerTrade(buy_cost=0.002, sell_cost=0.003, min_cost=5))
     else:
         set_commission(PerTrade(buy_cost=0.003, sell_cost=0.004, min_cost=5))
+
+    # 计算并记录当日个股250天内最大的3日涨幅及能承受的最大跌幅
+    update_maxr_bstd(context)
