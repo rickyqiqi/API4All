@@ -23,6 +23,7 @@
 #10.剔除创业板
 #11.删除了“三只乌鸦”形态识别
 #12.修改了中小板指数替代创业板指数作为二八中的八参照
+#13.增加了bstd作为个股在持仓3天内，能承受的最大跌幅判断
 
 
 from sqlalchemy import desc
@@ -104,11 +105,48 @@ def Multi_Select_Stocks(context, data):
     dfs=dfs.sort(columns='score',ascending=True)
     return dfs.index[:g.stockCount]
 
+def stock_monitor(context, data):
+    for stock in g.stocks:
+        if context.portfolio.positions[stock].sellable_amount > 0:
+            # maxd = 个股250天内最大的3日跌幅
+            # avgd = 个股250天内平均的3日跌幅
+            # bstd = (maxd+avgd)/2, 此bstd即为个股在持仓3天内，能承受的最大跌幅
+            # maxr = 个股250天内最大的3日涨幅，个股盈利超过其历史值maxr的时候，则立刻清仓止盈
+            h = attribute_history(stock, 250, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
+            maxr = 0.00
+            maxd = 0.00
+            avgd = 0.00
+            dcount = 0
+            for i in range(1, len(h)-3):
+                # 个股连续3日涨跌幅
+                dr3days = (h.close[i+2]-h.close[i-1])/h.close[i-1]
+                if dr3days > maxr:
+                    maxr = dr3days
+                if dr3days < maxd:
+                    maxd = dr3days
+                if dr3days < 0:
+                    avgd += dr3days
+                    dcount += 1
+                    avgd = avgd/dcount
+            bstd = (maxd+avgd)/2
+
+            # 当前价格超出止盈止损值，则卖出该股票
+            dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
+            if dr3cur >= maxr:
+                order_target_value(stock, 0)
+                print('止盈: ',stock,dr3cur,maxr)
+            if dr3cur <= maxd:
+                order_target_value(stock, 0)
+                print('止损: ',stock,dr3cur,maxd)
+
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
+
+    # 检查止盈止损条件，并操作股票
+    stock_monitor(context, data)
 
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
