@@ -105,39 +105,38 @@ def Multi_Select_Stocks(context, data):
     dfs=dfs.sort(columns='score',ascending=True)
     return dfs.index[:g.stockCount]
 
-def stock_monitor(context, data):
-    for stock in g.stocks:
-        if context.portfolio.positions[stock].sellable_amount > 0:
-            # maxd = 个股250天内最大的3日跌幅
-            # avgd = 个股250天内平均的3日跌幅
-            # bstd = (maxd+avgd)/2, 此bstd即为个股在持仓3天内，能承受的最大跌幅
-            # maxr = 个股250天内最大的3日涨幅，个股盈利超过其历史值maxr的时候，则立刻清仓止盈
-            h = attribute_history(stock, 250, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
-            maxr = 0.00
-            maxd = 0.00
-            avgd = 0.00
-            dcount = 0
-            for i in range(1, len(h)-3):
-                # 个股连续3日涨跌幅
-                dr3days = (h.close[i+2]-h.close[i-1])/h.close[i-1]
-                if dr3days > maxr:
-                    maxr = dr3days
-                if dr3days < maxd:
-                    maxd = dr3days
-                if dr3days < 0:
-                    avgd += dr3days
-                    dcount += 1
-                    avgd = avgd/dcount
-            bstd = (maxd+avgd)/2
+def stock_monitor(context, data, stock):
+    # maxd = 个股250天内最大的3日跌幅
+    # avgd = 个股250天内平均的3日跌幅
+    # bstd = (maxd+avgd)/2, 此bstd即为个股在持仓3天内，能承受的最大跌幅
+    # maxr = 个股250天内最大的3日涨幅，个股盈利超过其历史值maxr的时候，则立刻清仓止盈
+    h = attribute_history(stock, 250, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
+    maxr = 0.00
+    maxd = 0.00
+    avgd = 0.00
+    dcount = 0
+    for i in range(1, len(h)-3):
+        # 个股连续3日涨跌幅
+        dr3days = 0.00
+        if (not isnan(h.close[i+2])) and (not isnan(h.close[i-1])):
+            dr3days = (h.close[i+2]-h.close[i-1])/h.close[i-1]
+        if dr3days > maxr:
+            maxr = dr3days
+        if dr3days < maxd:
+            maxd = dr3days
+        if dr3days < 0:
+            avgd += dr3days
+            dcount += 1
+    avgd = avgd/dcount
+    bstd = (maxd+avgd)/2
 
-            # 当前价格超出止盈止损值，则卖出该股票
-            dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
-            if dr3cur >= maxr:
-                order_target_value(stock, 0)
-                print('止盈: ',stock,dr3cur,maxr)
-            if dr3cur <= maxd:
-                order_target_value(stock, 0)
-                print('止损: ',stock,dr3cur,maxd)
+    # 当前价格超出止盈止损值，则卖出该股票
+    dr3cur = (data[stock].close-h.close[-3])/h.close[-3]
+    if dr3cur >= maxr:
+        return 'TargetProfitArrived'
+    if dr3cur <= maxd:
+        return 'StopProfitArrived'
+    return 'NormalProfit'
 
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
@@ -146,7 +145,17 @@ def handle_data(context, data):
     minute = context.current_dt.minute
 
     # 检查止盈止损条件，并操作股票
-    stock_monitor(context, data)
+    for stock in g.stocks:
+        if context.portfolio.positions[stock].sellable_amount > 0:
+            profitStatus = stock_monitor(context, data, stock)
+            if profitStatus == 'TargetProfitArrived':
+                print('止盈: ')
+                order_target_value(stock, 0)
+                print('Sell: ',stock)
+            elif profitStatus == 'StopProfitArrived':
+                print('止损: ')
+                order_target_value(stock, 0)
+                print('Sell: ',stock)
 
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
@@ -189,6 +198,9 @@ def buy_stocks(context, data):
         #排除涨停、跌停股
         g.stocks = []
         for stock in buylist:
+            #排除符合止盈止损条件的股票
+            if stock_monitor(context, data, stock) != 'NormalProfit':
+                break
             if data[stock].low_limit < data[stock].close < data[stock].high_limit :
                 g.stocks.append(stock)
             #已持有的涨停股，继续持有    
