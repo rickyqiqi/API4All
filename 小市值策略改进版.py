@@ -145,6 +145,14 @@ def handle_data(context, data):
     hour = context.current_dt.hour
     minute = context.current_dt.minute
 
+#    if isThreeBlackCrows('000016.XSHG', data):
+#        for stock in g.stocks:
+#            if context.portfolio.positions[stock].sellable_amount > 0:
+#                #有仓位就清仓
+#    		    print ('三只乌鸦，清仓')
+#    		    sell_all_stocks(context)
+#        return
+
     # 检查止盈止损条件，并操作股票
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
@@ -191,6 +199,21 @@ def handle_data(context, data):
         else :
             print('清仓')
             sell_all_stocks(context)            
+
+def isThreeBlackCrows(stock, data):
+    his =  attribute_history(stock, 2, '1d', ('close','open'), skip_paused=True, df=False)
+    closeArray = list(his['close'])
+    closeArray.append(data[stock].close)
+    openArray = list(his['open'])
+    openArray.append(get_current_data()[stock].day_open)
+#    if closeArray[0]-0.045:
+    if closeArray[0]<openArray[0] and closeArray[1]<openArray[1] and closeArray[2]<openArray[2]:
+        if closeArray[-1]/closeArray[0]-1>-0.045:
+            his =  attribute_history(stock, 4, '1d', ('close','open'), skip_paused=True, df=False)
+            closeArray1 = his['close']
+            if closeArray[0]/closeArray1[0]-1>0:
+                return True
+    return False
 
 def buy_stocks(context, data):
     g.days += 1
