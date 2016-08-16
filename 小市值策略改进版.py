@@ -40,6 +40,8 @@ def initialize(context):
     g.days = 0
     g.period = 3
     g.maxrbstd = {}
+    g.exceptions = []
+    g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
     
 
 def getStockPrice(stock, interval):
@@ -148,7 +150,7 @@ def handle_data(context, data):
 #    if isThreeBlackCrows('000016.XSHG', data):
 #        for stock in g.stocks:
 #            if context.portfolio.positions[stock].sellable_amount > 0:
-#                #有仓位就清仓
+                #有仓位就清仓
 #    		    print ('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
 #        return
@@ -161,10 +163,12 @@ def handle_data(context, data):
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 print('止损: ')
                 order_target_value(stock, 0)
+                g.exceptions.append({'stock': stock, 'days': 0})
                 print('Sell: ',stock)
             elif dr3cur >= g.maxrbstd[stock]['maxr']:
                 print('止盈: ')
                 order_target_value(stock, 0)
+                g.exceptions.append({'stock': stock, 'days': 0})
                 print('Sell: ',stock)
 
     # 每天下午14:53调仓
@@ -226,7 +230,18 @@ def buy_stocks(context, data):
         for stock in buylist:
             #排除符合止盈止损条件的股票
             #if stock_monitor(context, data, stock) != 'NormalProfit':
-            #    break
+            #    continue
+            #排除n个交易日内被止盈止损的股票
+            skipit = False
+            for dstock in g.exceptions :
+                if dstock['stock'] == stock :
+                    skipit = True
+                    break
+            if skipit:
+                print('排除n个交易日内被止盈止损的股票')
+                print stock
+                continue
+
             if data[stock].low_limit < data[stock].close < data[stock].high_limit :
                 g.stocks.append(stock)
             #已持有的涨停股，继续持有    
@@ -309,3 +324,11 @@ def before_trading_start(context):
 
     # 计算并记录当日个股250天内最大的3日涨幅及能承受的最大跌幅
     update_maxr_bstd(context)
+    
+    #排除n个交易日之前被止盈止损的股票，允许其进入筛选备选股池
+    exceptstocks = g.exceptions
+    g.exceptions = []
+    for dstock in exceptstocks :
+        dstock['days'] += 1
+        if dstock['days'] <= g.exceptdays :
+            g.exceptions.append(dstock)
