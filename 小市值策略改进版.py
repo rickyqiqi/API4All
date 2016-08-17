@@ -43,7 +43,7 @@ def initialize(context):
     g.maxrbstd = {}
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
-    g.maxvalue = {} # 购买之后的最高价列表
+    g.maxvalue = {} # 日内最高价列表
     
 
 def getStockPrice(stock, interval):
@@ -97,20 +97,6 @@ def Multi_Select_Stocks(context, data):
 
     stock_select={}
     for s in stocks:
-        #排除符合止盈止损条件的股票
-        #if stock_monitor(context, data, s) != 'NormalProfit':
-        #    continue
-        #排除n个交易日内被止盈止损的股票
-        skipit = False
-        for dstock in g.exceptions :
-            if dstock['stock'] == s :
-                skipit = True
-                break
-        if skipit:
-            print('排除n个交易日内被止盈止损的股票')
-            print s
-            continue
-
         h = attribute_history(s, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
         lowPrice130 = h.low.min()
         highPrice130 = h.high.max()
@@ -253,9 +239,23 @@ def isThreeBlackCrows(stock, data):
 def buy_stocks(context, data):
     buylist = Multi_Select_Stocks(context, data)
 
-    #排除涨停、跌停股、符合止盈止损条件的股票、n个交易日内被止盈止损的股票
+    #排除涨停、跌停股
     g.stocks = []
     for stock in buylist:
+        #排除符合止盈止损条件的股票
+        #if stock_monitor(context, data, stock) != 'NormalProfit':
+        #    continue
+        #排除n个交易日内被止盈止损的股票
+        skipit = False
+        for dstock in g.exceptions :
+            if dstock['stock'] == stock :
+                skipit = True
+                break
+        if skipit:
+            print('排除n个交易日内被止盈止损的股票')
+            print stock
+            continue
+
         if data[stock].low_limit < data[stock].close < data[stock].high_limit :
             g.stocks.append(stock)
         #已持有的涨停股，继续持有    
@@ -267,19 +267,14 @@ def buy_stocks(context, data):
     set_universe(g.stocks)
 
     # close stock positions not in the current universe
+    failurestocks = []
     for stock in context.portfolio.positions.keys():
-        #确保股票数大于0，且该股票不在新选中的股票池内
-        if (context.portfolio.positions[stock].total_amount > 0) and (stock not in g.stocks):
+        if stock not in g.stocks:
             print('Rank Outof 10, Sell: ',stock)
             if order_target_value(stock, 0)==None :
                 #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
                 g.stocks.pop()
-                g.stocks.insert(0, stock)
-
-    #初始化新选中的股票的最高价
-    for stock in g.stocks :
-        if stock not in context.portfolio.positions.keys():
-            g.maxvalue[stock] = data[stock].close
+                failurestocks.append(stock)
 
     valid_count = 0
     for stock in context.portfolio.positions.keys():
@@ -290,6 +285,12 @@ def buy_stocks(context, data):
     if valid_count < len(g.stocks):
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+
+    #初始化新选中的股票池中的最高价
+    for stock in g.stocks :
+        g.maxvalue[stock] = data[stock].close
+    #股票池更新为新选中的股票加上售出失败的股票（如停牌股票）
+    g.stocks = g.stocks + failurestocks
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
