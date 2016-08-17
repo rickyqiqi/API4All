@@ -330,7 +330,7 @@ def before_trading_start(context):
     dt=context.current_dt
     # 设置手续费，每笔交易时的手续费是, 买入时券商佣金，卖出时券商佣金加千分之一印花税, 每笔交易最低扣5块钱
     if dt>datetime.datetime(2013,1, 1):
-        set_commission(PerTrade(buy_cost=0.00025, sell_cost=0.00125, min_cost=5)) 
+        set_commission(PerTrade(buy_cost=0.00027, sell_cost=0.00127, min_cost=5)) 
     elif dt>datetime.datetime(2011,1, 1):
         set_commission(PerTrade(buy_cost=0.001, sell_cost=0.002, min_cost=5))
     elif dt>datetime.datetime(2009,1, 1):
