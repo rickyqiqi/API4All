@@ -1,6 +1,6 @@
 #策略概述：《小市值策略改进版》
 #https://www.joinquant.com/post/2035?tag=new
-#1.选择动态市盈率>0的所有股票，按市值从小到大排序，选择前100支候选
+#1.选择eps>0的所有股票，按市值从小到大排序，选择前100支候选
 #2.剔除创业板，ST,*,退，停牌等股票
 #3.选择市值最小的20只（前20只）候选
 #4.给候选股票评分, 每天下午2点50分执行。
@@ -8,7 +8,7 @@
 #highPrice130 = 前130天内最高价格
 #avg15 = 前15天均价
 #currPrice = 当前价格
-#score = (currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15)
+#score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
 #5.将候选股票的score得分，从小到大排序。选择最小的4支持仓。
 #6.持股3天轮换，如果一样的就继续持有，不一样的就换掉。
 #7.大盘止损使用上证50，与中小板R 指数。如果都小于20天前的101%，则清空仓位不交易。
@@ -24,6 +24,7 @@
 #11.删除了“三只乌鸦”形态识别
 #12.修改了中小板指数替代创业板指数作为二八中的八参照
 #13.增加了bstd作为个股在持仓3天内，能承受的最大跌幅判断
+#14.每分钟监测股价，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
 
 
 from sqlalchemy import desc
@@ -42,6 +43,7 @@ def initialize(context):
     g.maxrbstd = {}
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
+    g.maxvalue = {} # 日内最高价列表
     
 
 def getStockPrice(stock, interval):
@@ -81,7 +83,7 @@ def Multi_Select_Stocks(context, data):
     q = query(
         valuation.code,
         ).filter(
-        valuation.pe_ratio > 0,
+        indicator.eps > 0,
         valuation.code.in_(stocks)
     ).order_by(
         # 按市值升序排列
@@ -100,7 +102,7 @@ def Multi_Select_Stocks(context, data):
         highPrice130 = h.high.max()
         avg15 = data[s].mavg(15)
         currPrice = data[s].close
-        score = (currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15)
+        score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
         stock_select[s] = score
         
     dfs = pd.DataFrame(stock_select.values(),index=stock_select.keys())
@@ -158,6 +160,15 @@ def handle_data(context, data):
     # 检查止盈止损条件，并操作股票
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
+            # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
+            if data[stock].close > g.maxvalue[stock] :
+                g.maxvalue[stock] = data[stock].close
+            if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099  :
+                print('止损: ')
+                order_target_value(stock, 0)
+                g.exceptions.append({'stock': stock, 'days': 0})
+                print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
+
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
@@ -253,27 +264,30 @@ def buy_stocks(context, data):
         set_universe(g.stocks)
         
         # close stock positions not in the current universe
-        cntSuspension=0
+        failurestocks = []
         for stock in context.portfolio.positions.keys():
             if stock not in g.stocks:
                 print('Rank Outof 10, Sell: ',stock)
                 if order_target_value(stock, 0)==None :
-                    #售出股票失败，则计数加1
-                    cntSuspension +=1
-        #由于可能出现售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，是股票数保持4个
-        g.stocks = g.stocks[:len(g.stocks)-cntSuspension]
+                    #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
+                    g.stocks.pop()
+                    failurestocks.append(stock)
         
         valid_count = 0
         for stock in context.portfolio.positions.keys():
             if context.portfolio.positions[stock].total_amount > 0:
                 valid_count = valid_count + 1
         # place equally weighted orders
-        if len(g.stocks) == 0 or valid_count >= len(g.stocks):
-            #已有股票数量>=4个，则直接返回
-            return
-        
-        for stock in g.stocks:
-            order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+        #已有股票数量>=4个，则直接返回
+        if valid_count < len(g.stocks):
+            for stock in g.stocks:
+                order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+
+        #初始化新选中的股票池中的最高价
+        for stock in g.stocks :
+            g.maxvalue[stock] = data[stock].close
+        #股票池更新为新选中的股票加上售出失败的股票（如停牌股票）
+        g.stocks = g.stocks + failurestocks
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
@@ -332,3 +346,13 @@ def before_trading_start(context):
         dstock['days'] += 1
         if dstock['days'] <= g.exceptdays :
             g.exceptions.append(dstock)
+    
+    #初始化当日最高价
+    g.maxvalue = {}
+    for stock in g.stocks :
+        h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
+        if (len(h) > 0) and (not isnan(h.close[-1])):
+            # 前一日收盘价为当前日初始最高价
+            g.maxvalue[stock] = h.close[-1]
+        else:
+            g.maxvalue[stock] = 0
