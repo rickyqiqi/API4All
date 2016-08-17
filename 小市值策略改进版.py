@@ -43,7 +43,7 @@ def initialize(context):
     g.maxrbstd = {}
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
-    g.maxvalue = {} # 日内最高价列表
+    g.maxvalue = {} # 购买之后的最高价列表
     
 
 def getStockPrice(stock, interval):
@@ -164,7 +164,7 @@ def handle_data(context, data):
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
             if data[stock].close > g.maxvalue[stock] :
                 g.maxvalue[stock] = data[stock].close
-            if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099  :
+            if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
                 if order_target_value(stock, 0) !=None :
                     todobuy = True
                     print('止损: ')
@@ -267,14 +267,19 @@ def buy_stocks(context, data):
     set_universe(g.stocks)
 
     # close stock positions not in the current universe
-    failurestocks = []
     for stock in context.portfolio.positions.keys():
-        if stock not in g.stocks:
+        #确保股票数大于0，且该股票不在新选中的股票池内
+        if (context.portfolio.positions[stock].total_amount > 0) and (stock not in g.stocks):
             print('Rank Outof 10, Sell: ',stock)
             if order_target_value(stock, 0)==None :
                 #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
                 g.stocks.pop()
-                failurestocks.append(stock)
+                g.stocks.insert(0, stock)
+
+    #初始化新选中的股票的最高价
+    for stock in g.stocks :
+        if stock not in context.portfolio.positions.keys():
+            g.maxvalue[stock] = data[stock].close
 
     valid_count = 0
     for stock in context.portfolio.positions.keys():
@@ -285,12 +290,6 @@ def buy_stocks(context, data):
     if valid_count < len(g.stocks):
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
-
-    #初始化新选中的股票池中的最高价
-    for stock in g.stocks :
-        g.maxvalue[stock] = data[stock].close
-    #股票池更新为新选中的股票加上售出失败的股票（如停牌股票）
-    g.stocks = g.stocks + failurestocks
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
