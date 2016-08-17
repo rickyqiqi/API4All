@@ -43,7 +43,7 @@ def initialize(context):
     g.maxrbstd = {}
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
-    g.maxvalue = {} # 日内最高价列表
+    g.maxvalue = {} # 购买之后的最高价列表
     
 
 def getStockPrice(stock, interval):
@@ -97,6 +97,20 @@ def Multi_Select_Stocks(context, data):
 
     stock_select={}
     for s in stocks:
+        #排除符合止盈止损条件的股票
+        #if stock_monitor(context, data, s) != 'NormalProfit':
+        #    continue
+        #排除n个交易日内被止盈止损的股票
+        skipit = False
+        for dstock in g.exceptions :
+            if dstock['stock'] == s :
+                skipit = True
+                break
+        if skipit:
+            print('排除n个交易日内被止盈止损的股票')
+            print s
+            continue
+
         h = attribute_history(s, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
         lowPrice130 = h.low.min()
         highPrice130 = h.high.max()
@@ -158,29 +172,33 @@ def handle_data(context, data):
 #        return
 
     # 检查止盈止损条件，并操作股票
+    todobuy = False
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
             if data[stock].close > g.maxvalue[stock] :
                 g.maxvalue[stock] = data[stock].close
             if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099  :
-                print('止损: ')
-                order_target_value(stock, 0)
-                g.exceptions.append({'stock': stock, 'days': 0})
-                print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
+                if order_target_value(stock, 0) !=None :
+                    todobuy = True
+                    print('止损: ')
+                    g.exceptions.append({'stock': stock, 'days': 0})
+                    print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
 
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
-                print('止损: ')
-                order_target_value(stock, 0)
-                g.exceptions.append({'stock': stock, 'days': 0})
-                print('Sell: ',stock)
+                if order_target_value(stock, 0) != None:
+                    todobuy = True
+                    print('止损: ')
+                    g.exceptions.append({'stock': stock, 'days': 0})
+                    print('Sell: ',stock)
             elif dr3cur >= g.maxrbstd[stock]['maxr']:
-                print('止盈: ')
-                order_target_value(stock, 0)
-                g.exceptions.append({'stock': stock, 'days': 0})
-                print('Sell: ',stock)
+                if order_target_value(stock, 0) != None:
+                    todobuy = True
+                    print('止盈: ')
+                    g.exceptions.append({'stock': stock, 'days': 0})
+                    print('Sell: ',stock)
 
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
@@ -207,10 +225,12 @@ def handle_data(context, data):
         #print(ret2,ret8)
         
         #奇怪，低于101%时清仓，回测效果出奇得好。
-        if ret2>0.01 or ret8>0.01 :   
-            print('持有，每3天进行调仓')
-            buy_stocks(context, data)
-            update_maxr_bstd(context)
+        if ret2>0.01 or ret8>0.01 :  
+            g.days += 1
+            if todobuy or (g.days % g.period == 1):            
+                print('持有，每3天进行调仓')
+                buy_stocks(context, data)
+                update_maxr_bstd(context)
         else :
             print('清仓')
             sell_all_stocks(context)            
@@ -231,63 +251,45 @@ def isThreeBlackCrows(stock, data):
     return False
 
 def buy_stocks(context, data):
-    g.days += 1
-    if g.days % g.period == 1:            
-            
-        buylist = Multi_Select_Stocks(context, data)
-        
-        #排除涨停、跌停股
-        g.stocks = []
-        for stock in buylist:
-            #排除符合止盈止损条件的股票
-            #if stock_monitor(context, data, stock) != 'NormalProfit':
-            #    continue
-            #排除n个交易日内被止盈止损的股票
-            skipit = False
-            for dstock in g.exceptions :
-                if dstock['stock'] == stock :
-                    skipit = True
-                    break
-            if skipit:
-                print('排除n个交易日内被止盈止损的股票')
-                print stock
-                continue
+    buylist = Multi_Select_Stocks(context, data)
 
-            if data[stock].low_limit < data[stock].close < data[stock].high_limit :
-                g.stocks.append(stock)
-            #已持有的涨停股，继续持有    
-            elif (data[stock].close == data[stock].high_limit) and (stock in context.portfolio.positions.keys()):
-                g.stocks.append(stock)
-            if len(g.stocks)>=g.buyStockCount:
-                break
-        #print(g.stocks)
-        set_universe(g.stocks)
-        
-        # close stock positions not in the current universe
-        failurestocks = []
-        for stock in context.portfolio.positions.keys():
-            if stock not in g.stocks:
-                print('Rank Outof 10, Sell: ',stock)
-                if order_target_value(stock, 0)==None :
-                    #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
-                    g.stocks.pop()
-                    failurestocks.append(stock)
-        
-        valid_count = 0
-        for stock in context.portfolio.positions.keys():
-            if context.portfolio.positions[stock].total_amount > 0:
-                valid_count = valid_count + 1
-        # place equally weighted orders
-        #已有股票数量>=4个，则直接返回
-        if valid_count < len(g.stocks):
-            for stock in g.stocks:
-                order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+    #排除涨停、跌停股、符合止盈止损条件的股票、n个交易日内被止盈止损的股票
+    g.stocks = []
+    for stock in buylist:
+        if data[stock].low_limit < data[stock].close < data[stock].high_limit :
+            g.stocks.append(stock)
+        #已持有的涨停股，继续持有    
+        elif (data[stock].close == data[stock].high_limit) and (stock in context.portfolio.positions.keys()):
+            g.stocks.append(stock)
+        if len(g.stocks)>=g.buyStockCount:
+            break
 
-        #初始化新选中的股票池中的最高价
-        for stock in g.stocks :
+    set_universe(g.stocks)
+
+    # close stock positions not in the current universe
+    for stock in context.portfolio.positions.keys():
+        #确保股票数大于0，且该股票不在新选中的股票池内
+        if (context.portfolio.positions[stock].total_amount > 0) and (stock not in g.stocks):
+            print('Rank Outof 10, Sell: ',stock)
+            if order_target_value(stock, 0)==None :
+                #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
+                g.stocks.pop()
+                g.stocks.insert(0, stock)
+
+    #初始化新选中的股票的最高价
+    for stock in g.stocks :
+        if stock not in context.portfolio.positions.keys():
             g.maxvalue[stock] = data[stock].close
-        #股票池更新为新选中的股票加上售出失败的股票（如停牌股票）
-        g.stocks = g.stocks + failurestocks
+
+    valid_count = 0
+    for stock in context.portfolio.positions.keys():
+        if context.portfolio.positions[stock].total_amount > 0:
+            valid_count = valid_count + 1
+    # place equally weighted orders
+    #已有股票数量>=4个，则直接返回
+    if valid_count < len(g.stocks):
+        for stock in g.stocks:
+            order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
@@ -347,12 +349,15 @@ def before_trading_start(context):
         if dstock['days'] <= g.exceptdays :
             g.exceptions.append(dstock)
     
-    #初始化当日最高价
-    g.maxvalue = {}
-    for stock in g.stocks :
-        h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
-        if (len(h) > 0) and (not isnan(h.close[-1])):
-            # 前一日收盘价为当前日初始最高价
-            g.maxvalue[stock] = h.close[-1]
+    #初始化购买之后的最高价，剔除不在持仓范围内的股票最高价元素
+    maxvalue = {}
+    for stock in context.portfolio.positions.keys():
+        if stock in g.stocks:
+            maxvalue[stock] = g.maxvalue[stock]
         else:
-            g.maxvalue[stock] = 0
+            h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
+            if (len(h) > 0) and (not isnan(h.close[-1])):
+                maxvalue[stock] = h.close[-1]
+            else:
+                maxvalue[stock] = 0
+    g.maxvalue = maxvalue
