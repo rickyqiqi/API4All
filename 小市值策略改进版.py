@@ -162,7 +162,10 @@ def handle_data(context, data):
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
-            if data[stock].close > g.maxvalue[stock] :
+            try:
+                if data[stock].close > g.maxvalue[stock] :
+                    g.maxvalue[stock] = data[stock].close
+            except KeyError:
                 g.maxvalue[stock] = data[stock].close
             if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
                 if order_target_value(stock, 0) !=None :
@@ -353,7 +356,10 @@ def before_trading_start(context):
     maxvalue = {}
     for stock in context.portfolio.positions.keys():
         if stock in g.stocks:
-            maxvalue[stock] = g.maxvalue[stock]
+            try:
+                maxvalue[stock] = g.maxvalue[stock]
+            except KeyError:
+                maxvalue[stock] = 0
         else:
             h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
             if (len(h) > 0) and (not isnan(h.close[-1])):
