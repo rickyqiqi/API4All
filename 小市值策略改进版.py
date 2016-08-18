@@ -97,6 +97,20 @@ def Multi_Select_Stocks(context, data):
 
     stock_select={}
     for s in stocks:
+        #排除n个交易日内被止盈止损的股票
+        skipit = False
+        for dstock in g.exceptions :
+            if dstock['stock'] == s :
+                skipit = True
+                break
+        if skipit:
+            print('排除n个交易日内被止盈止损的股票')
+            print s
+            continue
+        #排除符合止盈止损条件的股票
+        if stock_monitor(context, data, s) != 'NormalProfit':
+            continue
+
         h = attribute_history(s, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
         lowPrice130 = h.low.min()
         highPrice130 = h.high.max()
@@ -104,11 +118,16 @@ def Multi_Select_Stocks(context, data):
         currPrice = data[s].close
         score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
         stock_select[s] = score
-        
-    dfs = pd.DataFrame(stock_select.values(),index=stock_select.keys())
-    dfs.columns=['score']
-    dfs=dfs.sort(columns='score',ascending=True)
-    return dfs.index[:g.stockCount]
+
+    # 确保有股票被选中
+    if len(stock_select) > 0 :
+        dfs = pd.DataFrame(stock_select.values(),index=stock_select.keys())
+        dfs.columns=['score']
+        dfs=dfs.sort(columns='score',ascending=True)
+        return dfs.index[:g.stockCount]
+
+    # 返回空列表
+    return []
 
 def stock_monitor(context, data, stock):
     # maxd = 个股250天内最大的3日跌幅
@@ -241,24 +260,12 @@ def isThreeBlackCrows(stock, data):
 
 def buy_stocks(context, data):
     buylist = Multi_Select_Stocks(context, data)
+    if len(buylist) <= 0 :
+        return
 
     #排除涨停、跌停股
     g.stocks = []
     for stock in buylist:
-        #排除符合止盈止损条件的股票
-        #if stock_monitor(context, data, stock) != 'NormalProfit':
-        #    continue
-        #排除n个交易日内被止盈止损的股票
-        skipit = False
-        for dstock in g.exceptions :
-            if dstock['stock'] == stock :
-                skipit = True
-                break
-        if skipit:
-            print('排除n个交易日内被止盈止损的股票')
-            print stock
-            continue
-
         if data[stock].low_limit < data[stock].close < data[stock].high_limit :
             g.stocks.append(stock)
         #已持有的涨停股，继续持有    
