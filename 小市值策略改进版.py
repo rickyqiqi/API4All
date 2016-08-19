@@ -69,6 +69,14 @@ def sell_all_stocks(context):
     g.days = 0          
 
 def Multi_Select_Stocks(context, data):
+    #更新排除之前被止盈止损的股票，允许其进入筛选备选股池
+    for dstock in g.exceptions :
+        # 当前价格相对于之前止盈、止损价格的涨跌幅度
+        if (dstock['stopvalue'] != 0.0) and ((data[dstock['stock']].close-dstock['stopvalue'])/dstock['stopvalue'] > 0.15):
+            g.exceptions.remove(dstock)
+        elif (dstock['targetvalue'] != 0.0) and ((data[dstock['stock']].close-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
+            g.exceptions.remove(dstock)
+
     stocks = get_all_securities(['stock'])
     #排除新股
     stocks = stocks[(context.current_dt.date() - stocks.start_date) > datetime.timedelta(60)].index
@@ -205,13 +213,13 @@ def handle_data(context, data):
                 if order_target_value(stock, 0) != None:
                     todobuy = True
                     print('止损: ')
-                    g.exceptions.append({'stock': stock, 'days': 0})
+                    g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     print('Sell: ',stock)
             elif dr3cur >= g.maxrbstd[stock]['maxr']:
                 if order_target_value(stock, 0) != None:
                     todobuy = True
                     print('止盈: ')
-                    g.exceptions.append({'stock': stock, 'days': 0})
+                    g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     print('Sell: ',stock)
 
     # 每天下午14:53调仓
@@ -352,15 +360,7 @@ def before_trading_start(context):
 
     # 计算并记录当日个股250天内最大的3日涨幅及能承受的最大跌幅
     update_maxr_bstd(context)
-    
-    #排除n个交易日之前被止盈止损的股票，允许其进入筛选备选股池
-    exceptstocks = g.exceptions
-    g.exceptions = []
-    for dstock in exceptstocks :
-        dstock['days'] += 1
-        if dstock['days'] <= g.exceptdays :
-            g.exceptions.append(dstock)
-    
+
     #初始化购买之后的最高价，剔除不在持仓范围内的股票最高价元素
     #maxvalue = {}
     #for stock in context.portfolio.positions.keys():
