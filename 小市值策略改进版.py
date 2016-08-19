@@ -107,8 +107,13 @@ def Multi_Select_Stocks(context, data):
             print('排除n个交易日内被止盈止损的股票')
             print s
             continue
+
         #排除符合止盈止损条件的股票
         if stock_monitor(context, data, s) != 'NormalProfit':
+            continue
+
+        #排除现价涨停且未持有(已持有的涨停股继续持有)、跌停的股票
+        if (data[s].close <= data[s].low_limit) or ((data[s].close >= data[s].high_limit) and (s not in context.portfolio.positions.keys())) :
             continue
 
         h = attribute_history(s, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
@@ -214,7 +219,7 @@ def handle_data(context, data):
         # 获得当前总资产
         value = context.portfolio.portfolio_value
         
-        zs2 =  '000016.XSHG' #上证50指数
+        zs2 =  '000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
         zs8 =  '399005.XSHE' #中小板指数
     
         hs2 = getStockPrice(zs2, lag)
@@ -266,11 +271,7 @@ def buy_stocks(context, data):
     #排除涨停、跌停股
     g.stocks = []
     for stock in buylist:
-        if data[stock].low_limit < data[stock].close < data[stock].high_limit :
-            g.stocks.append(stock)
-        #已持有的涨停股，继续持有    
-        elif (data[stock].close == data[stock].high_limit) and (stock in context.portfolio.positions.keys()):
-            g.stocks.append(stock)
+        g.stocks.append(stock)
         if len(g.stocks)>=g.buyStockCount:
             break
 
