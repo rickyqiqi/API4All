@@ -43,7 +43,7 @@ def initialize(context):
     g.maxrbstd = {}
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
-    g.maxvalue = {} # 购买之后的最高价列表
+    #g.maxvalue = {} # 购买之后的最高价列表
     
 
 def getStockPrice(stock, interval):
@@ -186,17 +186,17 @@ def handle_data(context, data):
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
-            try:
-                if data[stock].close > g.maxvalue[stock] :
-                    g.maxvalue[stock] = data[stock].close
-            except KeyError:
-                g.maxvalue[stock] = data[stock].close
-            if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
-                if order_target_value(stock, 0) !=None :
-                    todobuy = True
-                    print('止损: ')
-                    g.exceptions.append({'stock': stock, 'days': 0})
-                    print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
+            #try:
+            #    if data[stock].close > g.maxvalue[stock] :
+            #        g.maxvalue[stock] = data[stock].close
+            #except KeyError:
+            #    g.maxvalue[stock] = data[stock].close
+            #if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
+            #    if order_target_value(stock, 0) !=None :
+            #        todobuy = True
+            #        print('止损: ')
+            #        g.exceptions.append({'stock': stock, 'days': 0})
+            #        print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
 
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
@@ -288,9 +288,9 @@ def buy_stocks(context, data):
                 g.stocks.insert(0, stock)
 
     #初始化新选中的股票的最高价
-    for stock in g.stocks :
-        if stock not in context.portfolio.positions.keys():
-            g.maxvalue[stock] = data[stock].close
+    #for stock in g.stocks :
+    #    if stock not in context.portfolio.positions.keys():
+    #        g.maxvalue[stock] = data[stock].close
 
     valid_count = 0
     for stock in context.portfolio.positions.keys():
@@ -361,17 +361,17 @@ def before_trading_start(context):
             g.exceptions.append(dstock)
     
     #初始化购买之后的最高价，剔除不在持仓范围内的股票最高价元素
-    maxvalue = {}
-    for stock in context.portfolio.positions.keys():
-        if stock in g.stocks:
-            try:
-                maxvalue[stock] = g.maxvalue[stock]
-            except KeyError:
-                maxvalue[stock] = 0
-        else:
-            h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
-            if (len(h) > 0) and (not isnan(h.close[-1])):
-                maxvalue[stock] = h.close[-1]
-            else:
-                maxvalue[stock] = 0
-    g.maxvalue = maxvalue
+    #maxvalue = {}
+    #for stock in context.portfolio.positions.keys():
+    #    if stock in g.stocks:
+    #        try:
+    #            maxvalue[stock] = g.maxvalue[stock]
+    #        except KeyError:
+    #            maxvalue[stock] = 0
+    #    else:
+    #        h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
+    #        if (len(h) > 0) and (not isnan(h.close[-1])):
+    #            maxvalue[stock] = h.close[-1]
+    #        else:
+    #            maxvalue[stock] = 0
+    #g.maxvalue = maxvalue
