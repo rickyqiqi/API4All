@@ -220,7 +220,7 @@ def handle_data(context, data):
         # 获得当前总资产
         value = context.portfolio.portfolio_value
         
-        zs2 =  '000016.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
+        zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
         zs8 =  '399005.XSHE' #中小板指数
     
         hs2 = getStockPrice(zs2, lag)
