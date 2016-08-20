@@ -165,7 +165,8 @@ def stock_monitor(context, data, stock):
         if dr3days < 0:
             avgd += dr3days
             dcount += 1
-    avgd = avgd/dcount
+    if dcount > 0 :
+        avgd = avgd/dcount
     bstd = (maxd+avgd)/2
 
     # 当前价格超出止盈止损值，则卖出该股票
@@ -337,7 +338,8 @@ def update_maxr_bstd(context):
             if dr3days < 0:
                 avgd += dr3days
                 dcount += 1
-        avgd = avgd/dcount
+        if dcount > 0 :
+            avgd = avgd/dcount
         bstd = (maxd+avgd)/2
 
         g.maxrbstd[stock] = {'maxr': maxr, 'bstd': bstd}
