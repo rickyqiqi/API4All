@@ -105,14 +105,14 @@ def Multi_Select_Stocks(context, data):
 
     stock_select={}
     for s in stocks:
-        #排除n个交易日内被止盈止损的股票
+        #排除之前被止盈止损的股票
         skipit = False
         for dstock in g.exceptions :
             if dstock['stock'] == s :
                 skipit = True
                 break
         if skipit:
-            print('排除n个交易日内被止盈止损的股票')
+            print('排除之前被止盈止损的股票')
             print s
             continue
 
@@ -181,13 +181,18 @@ def handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
+        
+    zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
+    zs8 =  '399005.XSHE' #中小板指数
 
-#    if isThreeBlackCrows('000016.XSHG', data):
+#    if isThreeBlackCrows(zs2, data) and isThreeBlackCrows(zs8, data):
 #        for stock in g.stocks:
 #            if context.portfolio.positions[stock].sellable_amount > 0:
-                #有仓位就清仓
+#                #有仓位就清仓
 #    		    print ('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
+#    	#设置为1，避免当天和第二天再次买入股票
+#    	#g.days = 1
 #        return
 
     # 检查止盈止损条件，并操作股票
@@ -227,9 +232,6 @@ def handle_data(context, data):
         lag = 20 # 回看前20天
         # 获得当前总资产
         value = context.portfolio.portfolio_value
-        
-        zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
-        zs8 =  '399005.XSHE' #中小板指数
     
         hs2 = getStockPrice(zs2, lag)
         hs8 = getStockPrice(zs8, lag)
