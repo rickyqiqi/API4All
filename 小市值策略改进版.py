@@ -184,7 +184,9 @@ def handle_data(context, data):
     minute = context.current_dt.minute
         
     zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
-    zs8 =  '399005.XSHE' #中小板指数
+    zs8 =  '159902.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
+    if context.current_dt>datetime.datetime(2008,7, 28):
+        zs8 =  '399005.XSHE'
 
 #    if isThreeBlackCrows(zs2, data) and isThreeBlackCrows(zs8, data):
 #        for stock in g.stocks:
@@ -221,7 +223,7 @@ def handle_data(context, data):
                     print('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     print('Sell: ',stock)
-            elif dr3cur >= g.maxrbstd[stock]['maxr']:
+            elif dr3cur >= g.maxrbstd[stock]['maxr']*1.015:
                 if order_target_value(stock, 0) != None:
                     todobuy = True
                     print('止盈: ')
