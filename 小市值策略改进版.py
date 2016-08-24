@@ -44,6 +44,7 @@ def initialize(context):
     g.exceptions = []
     g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
     #g.maxvalue = {} # 购买之后的最高价列表
+    #g.stockrecommend = []
     
 
 def getStockPrice(stock, interval):
@@ -138,7 +139,7 @@ def Multi_Select_Stocks(context, data):
         dfs = pd.DataFrame(stock_select.values(),index=stock_select.keys())
         dfs.columns=['score']
         dfs=dfs.sort(columns='score',ascending=True)
-        return dfs.index[:g.stockCount]
+        return dfs.index[:g.stockCount].values.tolist()
 
     # 返回空列表
     return []
@@ -188,6 +189,8 @@ def handle_data(context, data):
     if context.current_dt>datetime.datetime(2008,7, 28):
         zs8 =  '399005.XSHE'
 
+    lag = 20 # 回看前20天
+
 #    if isThreeBlackCrows(zs2, data) and isThreeBlackCrows(zs8, data):
 #        for stock in g.stocks:
 #            if context.portfolio.positions[stock].sellable_amount > 0:
@@ -230,9 +233,36 @@ def handle_data(context, data):
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     print('Sell: ',stock)
 
+#    if (minute%30 == 0) :
+#        hs2 = getStockPrice(zs2, lag)
+#        hs8 = getStockPrice(zs8, lag)
+#        cp2 = data[zs2].close
+#        cp8 = data[zs8].close
+
+#        if (not isnan(hs2)) and (not isnan(cp2)):
+#            ret2 = (cp2 - hs2) / hs2;
+#        else:
+#            ret2 = 0
+#        if (not isnan(hs8)) and (not isnan(cp8)):
+#            ret8 = (cp8 - hs8) / hs8;
+#        else:
+#            ret8 = 0
+        #print(ret2,ret8)
+        
+        #奇怪，低于101%时清仓，回测效果出奇得好。
+#        if ret2>0.01 or ret8>0.01 :  
+#            stockrecommend = Multi_Select_Stocks(context, data)
+#            stockrecommend.sort()
+#            if cmp(g.stockrecommend, stockrecommend) != 0 :
+#                g.stockrecommend = stockrecommend
+#                print '推荐股票'
+#                print g.stockrecommend
+#        elif g.stockrecommend != []:
+#            g.stockrecommend = []
+#            print('不推荐买入股票')
+
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
-        lag = 20 # 回看前20天
         # 获得当前总资产
         value = context.portfolio.portfolio_value
     
@@ -278,16 +308,9 @@ def isThreeBlackCrows(stock, data):
     return False
 
 def buy_stocks(context, data):
-    buylist = Multi_Select_Stocks(context, data)
-    if len(buylist) <= 0 :
+    g.stocks = Multi_Select_Stocks(context, data)
+    if len(g.stocks) <= 0 :
         return
-
-    #排除涨停、跌停股
-    g.stocks = []
-    for stock in buylist:
-        g.stocks.append(stock)
-        if len(g.stocks)>=g.buyStockCount:
-            break
 
     set_universe(g.stocks)
 
