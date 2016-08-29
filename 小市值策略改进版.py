@@ -234,6 +234,33 @@ def handle_data(context, data):
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     print('Sell: ',stock)
 
+#    if context.portfolio.positions_value > 0:
+#        hs2 = getStockPrice(zs2, lag)
+#        hs8 = getStockPrice(zs8, lag)
+#        cp2 = data[zs2].close
+#        cp8 = data[zs8].close
+
+#        cmp2result = True
+#        cmp8result = True
+#        if (not isnan(hs2)) and (not isnan(cp2)):
+#            ret2 = (cp2 - hs2) / hs2;
+#            if ret2>0.01 :
+#                cmp2result = False
+#        else:
+#            ret2 = 0
+#        if (not isnan(hs8)) and (not isnan(cp8)):
+#            ret8 = (cp8 - hs8) / hs8;
+#            if ret8>0.01 :
+#                cmp8result = False
+#        else:
+#            ret8 = 0
+#        if cmp2result and cmp8result:
+#            #有仓位就清仓
+#    	    print ('二八未满足条件，清仓')
+#    	    sell_all_stocks(context)
+#    	    # 修整1天，设置为2，避免当天再次买入股票
+#    	    g.days = 2
+
     # 超过一半的所持股票止损，清仓观望
     if g.stopstocks*2 >= len(g.stocks) :
         todobuy = False
@@ -241,8 +268,8 @@ def handle_data(context, data):
             #有仓位就清仓
     	    print ('多只股票达到止损线，清仓')
     	    sell_all_stocks(context)
-    	    # 修整3天，设置为1，避免当天和第二天再次买入股票
-    	    g.days = 1
+    	    # 修整1天，设置为2，避免当天再次买入股票
+    	    g.days = 2
 
 #    if (minute%30 == 0) :
 #        hs2 = getStockPrice(zs2, lag)
