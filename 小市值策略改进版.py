@@ -290,7 +290,8 @@ def handle_data(context, data):
             ret8 = (cp8 - hs8) / hs8;
         else:
             ret8 = 0
-        #print(ret2,ret8)
+        print '----二八指数20日涨幅----'
+        print(ret2,ret8)
         
         #奇怪，低于101%时清仓，回测效果出奇得好。
         if ret2>0.01 or ret8>0.01 :  
@@ -301,7 +302,7 @@ def handle_data(context, data):
                 update_maxr_bstd(context)
         else :
             print('清仓')
-            sell_all_stocks(context)            
+            sell_all_stocks(context)
 
 def isThreeBlackCrows(stock, data):
     his =  attribute_history(stock, 2, '1d', ('close','open'), skip_paused=True, df=False)
