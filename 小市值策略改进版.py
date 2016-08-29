@@ -42,7 +42,7 @@ def initialize(context):
     g.period = 3
     g.maxrbstd = {}
     g.exceptions = []
-    g.exceptdays = 8 # 不再购入被止盈止损的股票的天数
+    g.stopstocks = 0
     #g.maxvalue = {} # 购买之后的最高价列表
     #g.stockrecommend = []
     
@@ -223,6 +223,7 @@ def handle_data(context, data):
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 if order_target_value(stock, 0) != None:
                     todobuy = True
+                    g.stopstocks += 1
                     print('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     print('Sell: ',stock)
@@ -232,6 +233,16 @@ def handle_data(context, data):
                     print('止盈: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     print('Sell: ',stock)
+
+    # 超过一半的所持股票止损，清仓观望
+    if g.stopstocks*2 >= len(g.stocks) :
+        todobuy = False
+        if context.portfolio.positions_value > 0:
+            #有仓位就清仓
+    	    print ('多只股票达到止损线，清仓')
+    	    sell_all_stocks(context)
+    	    # 修整3天，设置为1，避免当天和第二天再次买入股票
+    	    g.days = 1
 
 #    if (minute%30 == 0) :
 #        hs2 = getStockPrice(zs2, lag)
@@ -338,6 +349,8 @@ def buy_stocks(context, data):
     if valid_count < len(g.stocks):
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+            curr_data = get_current_data()
+            print curr_data[stock].name
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
@@ -405,3 +418,5 @@ def before_trading_start(context):
     #        else:
     #            maxvalue[stock] = 0
     #g.maxvalue = maxvalue
+    
+    g.stopstocks = 0
