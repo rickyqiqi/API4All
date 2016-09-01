@@ -197,8 +197,8 @@ def handle_data(context, data):
 #                #有仓位就清仓
 #    		    print ('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
-#    	#设置为1，避免当天和第二天再次买入股票
-#    	#g.days = 1
+#    	#设置为2，避免当天再次买入股票
+#    	g.days = 2
 #        return
 
     # 检查止盈止损条件，并操作股票
