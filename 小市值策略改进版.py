@@ -173,7 +173,7 @@ def stock_monitor(context, data, stock):
     bstd = (maxd+avgd)/2
 
     # 当前价格超出止盈止损值，则卖出该股票
-    dr3cur = (data[stock].close-h.close[-3])/h.close[-3]
+    dr3cur = (data[stock].close-h.close[-2])/h.close[-2]
     if dr3cur >= maxr:
         return 'TargetProfitArrived'
     if dr3cur <= bstd:
