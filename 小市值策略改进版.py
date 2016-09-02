@@ -66,6 +66,8 @@ def sell_all_stocks(context):
     for stock in context.portfolio.positions.keys():
             order_target_value(stock, 0)
             print('Sell: ',stock)
+            curr_data = get_current_data()
+            print curr_data[stock].name
     #很关键！第一次写程序的时候没有这一句，会造成下面的无法买入。
     g.days = 0          
 
@@ -217,6 +219,8 @@ def handle_data(context, data):
             #        print('止损: ')
             #        g.exceptions.append({'stock': stock, 'days': 0})
             #        print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
+            #        curr_data = get_current_data()
+            #        print curr_data[stock].name
 
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
@@ -227,12 +231,16 @@ def handle_data(context, data):
                     print('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     print('Sell: ',stock)
+                    curr_data = get_current_data()
+                    print curr_data[stock].name
             elif dr3cur >= g.maxrbstd[stock]['maxr']*1.015:
                 if order_target_value(stock, 0) != None:
                     todobuy = True
                     print('止盈: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     print('Sell: ',stock)
+                    curr_data = get_current_data()
+                    print curr_data[stock].name
 
     # 超过一半的所持股票止损，清仓观望
     if g.stopstocks*2 >= len(g.stocks) :
@@ -255,13 +263,13 @@ def handle_data(context, data):
         cmp8result = True
         if (not isnan(hs2)) and (not isnan(cp2)):
             ret2 = (cp2 - hs2) / hs2;
-            if ret2>-0.01 :
+            if ret2>-0.004 :
                 cmp2result = False
         else:
             ret2 = 0
         if (not isnan(hs8)) and (not isnan(cp8)):
             ret8 = (cp8 - hs8) / hs8;
-            if ret8>-0.01 :
+            if ret8>-0.004 :
                 cmp8result = False
         else:
             ret8 = 0
@@ -358,11 +366,13 @@ def buy_stocks(context, data):
     for stock in context.portfolio.positions.keys():
         #确保股票数大于0，且该股票不在新选中的股票池内
         if (context.portfolio.positions[stock].total_amount > 0) and (stock not in g.stocks):
-            print('Rank Outof 10, Sell: ',stock)
             if order_target_value(stock, 0)==None :
                 #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
                 g.stocks.pop()
                 g.stocks.insert(0, stock)
+            print('Rank Outof 10, Sell: ',stock)
+            curr_data = get_current_data()
+            print curr_data[stock].name
 
     #初始化新选中的股票的最高价
     #for stock in g.stocks :
@@ -378,6 +388,7 @@ def buy_stocks(context, data):
     if valid_count < len(g.stocks):
         for stock in g.stocks:
             order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+            print('buy: ',stock)
             curr_data = get_current_data()
             print curr_data[stock].name
 
