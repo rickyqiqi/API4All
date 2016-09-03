@@ -205,6 +205,7 @@ def handle_data(context, data):
 
     # 检查止盈止损条件，并操作股票
     todobuy = False
+    stockscrashed = 0
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
@@ -222,6 +223,9 @@ def handle_data(context, data):
             #        curr_data = get_current_data()
             #        print curr_data[stock].name
 
+            # 对当天下跌幅度过大的股票进行计数统计
+            if data[stock].close  < 0.955*getStockPrice(stock, 1) :
+                stockscrashed += 1
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
@@ -242,8 +246,8 @@ def handle_data(context, data):
                     curr_data = get_current_data()
                     print curr_data[stock].name
 
-    # 超过一半的所持股票止损，清仓观望
-    if g.stopstocks*2 >= len(g.stocks) :
+    # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
+    if stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks) :
         todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
