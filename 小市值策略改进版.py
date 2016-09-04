@@ -180,6 +180,22 @@ def stock_monitor(context, data, stock):
         return 'StopProfitArrived'
     return 'NormalProfit'
 
+def isStockBearish(stock, data, interval):
+    h = attribute_history(stock, interval, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
+    # 当前价格相比于前一日开盘价下跌3%以上
+    if (not isnan(h['close'].values[-1])) and (data[stock].close < 0.97*h['close'].values[-1]) :
+        for i in range(1, interval) :
+            # 当前价格低于前几日中某个超过2%的下跌日的最低价，且该日之后几天未有效突破该日最高价
+            if (not isnan(h['close'].values[i])) and (not isnan(h['close'].values[i-1])) and (not isnan(h['low'].values[i])) \
+                and (h['close'].values[i] < 0.98*h['close'].values[i-1]) and (data[stock].close < h['low'].values[i]) :
+                l = 0
+                for l in range(i+1, interval) :
+                    if (not isnan(h['close'].values[l])) and (not isnan(h['high'].values[i])) and (h['close'].values[l] > h['high'].values[i]) :
+                        break
+                if l < interval :
+                    return True
+    return False
+
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
     # 获得当前时间
@@ -224,7 +240,7 @@ def handle_data(context, data):
             #        print curr_data[stock].name
 
             # 对当天下跌幅度过大的股票进行计数统计
-            if data[stock].close  < 0.955*getStockPrice(stock, 1) :
+            if isStockBearish(stock, data, 5) :
                 stockscrashed += 1
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
@@ -258,26 +274,7 @@ def handle_data(context, data):
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0:
-        hs2 = getStockPrice(zs2, lag)
-        hs8 = getStockPrice(zs8, lag)
-        cp2 = data[zs2].close
-        cp8 = data[zs8].close
-
-        cmp2result = True
-        cmp8result = True
-        if (not isnan(hs2)) and (not isnan(cp2)):
-            ret2 = (cp2 - hs2) / hs2;
-            if ret2>-0.004 :
-                cmp2result = False
-        else:
-            ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            ret8 = (cp8 - hs8) / hs8;
-            if ret8>-0.004 :
-                cmp8result = False
-        else:
-            ret8 = 0
-        if cmp2result and cmp8result:
+        if isStockBearish(zs2, data, 5) or isStockBearish(zs8, data, 5) :
             #有仓位就清仓
     	    print ('二八未满足条件，清仓')
     	    sell_all_stocks(context)
