@@ -259,7 +259,7 @@ def handle_data(context, data):
                     print('Sell: ',stock)
                     curr_data = get_current_data()
                     print curr_data[stock].name
-            elif dr3cur >= g.maxrbstd[stock]['maxr']*1.015:
+            elif dr3cur >= g.maxrbstd[stock]['maxr']*1.100:
                 if order_target_value(stock, 0) != None:
                     todobuy = True
                     print('止盈: ')
