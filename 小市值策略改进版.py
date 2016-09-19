@@ -197,7 +197,7 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
                         breakout = False
                         break
         if breakout :
-#            print '.............股票跌幅过大...............'
+            print '.............股票跌幅过大...............'
             return True
     return False
 
@@ -299,6 +299,11 @@ def handle_data(context, data):
                 cmp8result = False
         else:
             ret8 = 0
+        if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)):
+            print '--------------------', context.current_dt, '--------------------'
+            print '二八指数20日涨幅: '
+            print (ret2,ret8)
+
         if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
     	    print ('二八未满足条件，清仓')
