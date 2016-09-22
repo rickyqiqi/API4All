@@ -278,32 +278,31 @@ def handle_data(context, data):
     	    # 修整1天，设置为2，避免当天再次买入股票
     	    g.days = 2
 
+    hs2 = getStockPrice(zs2, lag)
+    hs8 = getStockPrice(zs8, lag)
+    cp2 = data[zs2].close
+    cp8 = data[zs8].close
+
+    cmp2result = True
+    cmp8result = True
+    if (not isnan(hs2)) and (not isnan(cp2)):
+        ret2 = (cp2 - hs2) / hs2;
+        if ret2>-0.004 :
+            cmp2result = False
+    else:
+        ret2 = 0
+    if (not isnan(hs8)) and (not isnan(cp8)):
+        ret8 = (cp8 - hs8) / hs8;
+        if ret8>-0.004 :
+            cmp8result = False
+    else:
+        ret8 = 0
+    if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)) or (hour == 14 and minute == 50):
+        print '----二八指数20日涨幅----'
+        print (ret2,ret8)
+
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0:
-        hs2 = getStockPrice(zs2, lag)
-        hs8 = getStockPrice(zs8, lag)
-        cp2 = data[zs2].close
-        cp8 = data[zs8].close
-
-        cmp2result = True
-        cmp8result = True
-        if (not isnan(hs2)) and (not isnan(cp2)):
-            ret2 = (cp2 - hs2) / hs2;
-            if ret2>-0.004 :
-                cmp2result = False
-        else:
-            ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            ret8 = (cp8 - hs8) / hs8;
-            if ret8>-0.004 :
-                cmp8result = False
-        else:
-            ret8 = 0
-        if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)):
-            print '--------------------', context.current_dt, '--------------------'
-            print '二八指数20日涨幅: '
-            print (ret2,ret8)
-
         if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
     	    print ('二八未满足条件，清仓')
@@ -341,25 +340,6 @@ def handle_data(context, data):
 
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
-        # 获得当前总资产
-        value = context.portfolio.portfolio_value
-    
-        hs2 = getStockPrice(zs2, lag)
-        hs8 = getStockPrice(zs8, lag)
-        cp2 = data[zs2].close
-        cp8 = data[zs8].close
-        
-        if (not isnan(hs2)) and (not isnan(cp2)):
-            ret2 = (cp2 - hs2) / hs2;
-        else:
-            ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            ret8 = (cp8 - hs8) / hs8;
-        else:
-            ret8 = 0
-        print '----二八指数20日涨幅----'
-        print(ret2,ret8)
-        
         #奇怪，低于101%时清仓，回测效果出奇得好。
         if ret2>0.01 or ret8>0.01 :  
             g.days += 1
