@@ -45,7 +45,15 @@ def initialize(context):
     g.stopstocks = 0
     #g.maxvalue = {} # 购买之后的最高价列表
     #g.stockrecommend = []
-    
+  # 测试多头趋势的均线长度
+    g.ma_lengths = [5,10,20,60,120]
+    # 测试买入回踩的均线长度
+    g.test_ma_length = 10
+    # 买入时回踩但必须站住的均线
+    g.stand_ma_length = 10
+    # 多头趋势天数
+    g.in_trend_days = 7
+
 
 def getStockPrice(stock, interval):
     h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
@@ -71,6 +79,80 @@ def sell_all_stocks(context):
     #很关键！第一次写程序的时候没有这一句，会造成下面的无法买入。
     g.days = 0          
 
+# 计算买入信号
+# 输入所有多头趋势股票
+# 返回一list，包含所有在趋势内但是踩到测量均线的股票
+def buy_signal(available_stocks, context):
+    in_trend_stocks = get_in_trends(available_stocks, context)
+
+    # 建立空list 
+    signal = []
+    # 对于所有多头趋势股票
+    for security in in_trend_stocks:
+        # 获取历史收盘价
+        past_prices = attribute_history(security,g.test_ma_length, '1d', 'close', skip_paused = True)
+        # 计算均线
+        test_ma = sum(past_prices).iloc[0] / g.test_ma_length
+        # 获取站住均线数据
+        past_prices_2 = attribute_history(security, g.stand_ma_length, '1d', 'close', skip_paused= True) 
+        # 计算均线
+        stand_ma = sum(past_prices_2).iloc[0] / g.stand_ma_length
+        # 获取昨日信息
+        previous_history = attribute_history(security, 1, '1d', ['close','low'])
+        # 昨日收盘价
+        current_price = previous_history['close'].iloc[0]
+        # 昨日最低价
+        previous_low = previous_history['low'].iloc[0]
+        # 如果该股票没有持仓，并且前收盘价低于目标均线
+        if current_price <= test_ma :
+            # 加入信号list 
+            signal.append(security)
+    # 输出信号
+    return(signal)
+
+# 获取所有多头趋势股票
+# 输入一list有效股票
+# 输出一list，为所有符合从小到长均线排列从大到小的股票
+def get_in_trends(available_stocks, context):
+    # 建立需要入选的股票list，只要发现股票有两根均线不符合多头趋势，就加入删除名单并停止计算
+    stockselected = []
+    # 对于所有有效股票
+    for security in available_stocks:
+        # 获取最长ma长度
+        longest_ma = max(g.ma_lengths)
+        # 今日日期
+        date = context.current_dt
+        # 获取过去价格
+        all_past_prices = attribute_history(security,longest_ma + g.in_trend_days -1, '1d', 'close',  skip_paused = True)
+        # 对于认定趋势的每一天
+        for day in range(g.in_trend_days):
+            # 筛去尾部的-day天数据
+            if day == 0:
+                past_prices = all_past_prices
+            else:
+                past_prices = all_past_prices[:-day]
+            # 建立空均线值list 
+            mas = []
+            # 对于所有均线长度
+            for length in g.ma_lengths:
+                # 截取相应数据
+                ma_data = past_prices[-length:]
+                # 算均值
+                ma = sum(ma_data).iloc[0]/ length
+                # 计入list 
+                mas.append(ma)
+            # 从大到小排列均值list 
+            sorted_mas = sorted(mas)
+            sorted_mas.reverse()
+            # 如果排列之后和之前不
+            if mas == sorted_mas:
+                # 加入入选名单行列
+                stockselected.append(security)
+                # 不继续进行运算
+                break
+    # 返回趋势股票list 
+    return(stockselected)
+
 def Multi_Select_Stocks(context, data):
     #更新排除之前被止盈止损的股票，允许其进入筛选备选股池
     for dstock in g.exceptions :
@@ -90,6 +172,8 @@ def Multi_Select_Stocks(context, data):
     stocks = list(st[st==False].index)
     stocks = unpaused(stocks)
     stocks = filterStarName(stocks)
+
+    addscorelist = get_in_trends(stocks, context)
 
     q = query(
         valuation.code,
@@ -137,6 +221,8 @@ def Multi_Select_Stocks(context, data):
         currPrice = data[s].close
         #score = (currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15)
         score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
+        if s in addscorelist :
+            score -= 0.08
         stock_select[s] = score
 
     # 确保有股票被选中
@@ -269,14 +355,14 @@ def handle_data(context, data):
                     print curr_data[stock].name
 
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
-    if stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks) :
+    if (stockscrashed > 0 and g.stopstocks > 0 and len(g.stocks) > 0) and (stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks)) :
         todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
-    	    print ('多只股票达到止损线，清仓')
-    	    sell_all_stocks(context)
-    	    # 修整1天，设置为2，避免当天再次买入股票
-    	    g.days = 2
+            print ('多只股票达到止损线，清仓')
+            sell_all_stocks(context)
+        # 修整1天，设置为2，避免当天再次买入股票
+        g.days = 2
 
     hs2 = getStockPrice(zs2, lag)
     hs8 = getStockPrice(zs8, lag)
@@ -302,13 +388,13 @@ def handle_data(context, data):
         print (ret2,ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
-    if context.portfolio.positions_value > 0:
-        if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
+    if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
+        if context.portfolio.positions_value > 0 :
             #有仓位就清仓
-    	    print ('二八未满足条件，清仓')
-    	    sell_all_stocks(context)
-    	    # 修整1天，设置为2，避免当天再次买入股票
-    	    g.days = 2
+            print ('二八未满足条件，清仓')
+            sell_all_stocks(context)
+        # 修整1天，设置为2，避免当天再次买入股票
+        g.days = 2
 
 #    if (minute%30 == 0) :
 #        hs2 = getStockPrice(zs2, lag)
@@ -341,7 +427,7 @@ def handle_data(context, data):
     # 每天下午14:53调仓
     if hour ==14 and minute==50:
         #奇怪，低于101%时清仓，回测效果出奇得好。
-        if ret2>0.01 or ret8>0.01 :  
+        if ret2>0.01 or ret8>0.01 :
             g.days += 1
             if todobuy or (g.days % g.period == 1):            
                 print('持有，每3天进行调仓')
