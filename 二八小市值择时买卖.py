@@ -94,6 +94,11 @@ def initialize(context):
         # 缓存当日个股250天内最大的3日涨幅，避免当日反复获取，每日盘后清空
         g.pct_change = {}
 
+    # 调仓完成标志
+    g.position_change_finished = False
+    # 当日涨幅超出过设定调仓的二八指数20日增幅标志
+    g.index_growth_rate_over_uplimit = False
+
     # 打印策略参数
     log_param()
 
@@ -137,7 +142,7 @@ def set_param():
         g.rank_stock_count = 20
 
         # 股票多头趋势加分项参数
-        g.is_rank_stock_score_plus_allowed = True
+        g.is_rank_stock_score_plus_allowed = False
         if g.is_rank_stock_score_plus_allowed:
             # 加分因子（倍率）
             g.rank_stock_score_plus_factor = 0.04
@@ -159,6 +164,13 @@ def set_param():
     # 判定调仓的二八指数20日增幅
     #g.index_growth_rate_20 = 0.00
     g.index_growth_rate_20 = 0.01
+
+    # 配置是否空仓情况下检查全天买入机会
+    # 全天中有超过二八指数20日增幅的情况，但到达调仓时间点时又回撤回去了
+    g.check_buy_in_chance_in_zero_position = True
+    if g.check_buy_in_chance_in_zero_position:
+        # 调仓时间点二八指数20日增幅允许为标准二八指数20日增幅的百分比
+        g.ajust_rate_4_index_growth_rate_20 = 0.93
 
     # 配置是否根据大盘历史价格止损
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
@@ -251,6 +263,11 @@ def reset_day_param():
     if g.is_market_stop_loss_by_3_black_crows:
         g.cur_drop_minute_count = 0
 
+    # 复位调仓完成标志
+    g.position_change_finished = False
+    # 复位当日涨幅超出过设定调仓的二八指数20日增幅标志
+    g.index_growth_rate_over_uplimit = False
+
 # 按分钟回测
 def handle_data(context, data):
     if g.is_market_stop_loss_by_price:
@@ -267,38 +284,74 @@ def handle_data(context, data):
     if g.is_stock_stop_profit:
         stock_stop_profit(context, data)
 
+    do_handle_data(context, data)
+
+def do_handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
-    
-    if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)) or (hour == g.adjust_position_hour and minute == g.adjust_position_minute):
-        # 调仓换股标记
-        changeposition = False
-        # 每天下午14:50调仓
-        if hour == g.adjust_position_hour and minute == g.adjust_position_minute:
-            changeposition = True
-        do_handle_data(context, data, changeposition)
 
-def do_handle_data(context, data, changeposition=True):
-    # 回看指数前20天的涨幅
-    gr_index2 = get_growth_rate(g.index2)
-    gr_index8 = get_growth_rate(g.index8)
-    log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
-    log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index8).display_name, gr_index8*100))
+    # 是否计算二八指数20日增幅的标志
+    index_growth_2_calculate = False
+    # 是否设置了空仓情况下检查全天买入机会的选项，且当前仓位为空
+    # 是否是指定显示输出涨幅的时点
+    # 是否是调仓时点及其之后的时点
+    if (g.check_buy_in_chance_in_zero_position and context.portfolio.positions_value <= 0) \
+        or ((hour >= 9 and hour <= 11) and (minute == 30)) \
+            or ((hour >= 13 and hour <= 15) and (minute == 0)) \
+            or (hour == g.adjust_position_hour and minute >= g.adjust_position_minute):
+        index_growth_2_calculate = True
 
-    if changeposition :
-        log.info("调仓日计数 [%d]" %(g.day_count))
+    if index_growth_2_calculate:
+        # 回看指数前20天的涨幅
+        gr_index2 = get_growth_rate(g.index2)
+        gr_index8 = get_growth_rate(g.index8)
 
-        if gr_index2 <= g.index_growth_rate_20 and gr_index8 <= g.index_growth_rate_20:
-            clear_position(context)
-            g.day_count = 0
-        else: #if  gr_index2 > g.index_growth_rate_20 or ret_index8 > g.index_growth_rate_20:
-            if g.day_count % g.period == 0:
-                log.info("==> 满足条件进行调仓")
-                buy_stocks = pick_stocks(context, data)
-                log.info("选股后可买股票: %s" %(buy_stocks))
-                adjust_position(context, buy_stocks)
-            g.day_count += 1
+        # 是否设置了空仓情况下检查全天买入机会的选项
+        if g.check_buy_in_chance_in_zero_position:
+            # 超过标准二八指数20日增幅则记录下来
+            if gr_index2 > g.index_growth_rate_20 or gr_index8 > g.index_growth_rate_20:
+                g.index_growth_rate_over_uplimit = True
+
+        # 是否当日调仓已经完成
+        if not g.position_change_finished:
+            # 是否是指定显示输出涨幅的时点
+            # 是否是调仓时点及其之后的时点
+            if ((hour >= 9 and hour <= 11) and (minute == 30)) \
+                or ((hour >= 13 and hour <= 15) and (minute == 0)) \
+                or (hour == g.adjust_position_hour and minute >= g.adjust_position_minute):
+                log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
+                log.info("当前%s指数的20日涨幅 [%.2f%%]\n\t" %(get_security_info(g.index8).display_name, gr_index8*100))
+
+            # 是否是调仓时点及其之后的时点
+            # 每天下午14:50调仓
+            if hour == g.adjust_position_hour and minute >= g.adjust_position_minute:
+                log.info("调仓日计数 [%d]" %(g.day_count))
+
+                buy_in_condition = (gr_index2 > g.index_growth_rate_20) or (gr_index8 > g.index_growth_rate_20)
+
+                # 是否设置了空仓情况下检查全天买入机会的选项
+                if g.check_buy_in_chance_in_zero_position:
+                    # 仓位是否为空仓
+                    # 是否全天中有超过标准二八指数20日增幅
+                    # 当前调仓时间点指数涨幅超过了标准二八指数20日增幅的一定调整比例
+                    if (context.portfolio.positions_value <= 0) and g.index_growth_rate_over_uplimit \
+                        and (gr_index2 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20 \
+                            or gr_index8 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20):
+                        buy_in_condition = True
+
+                if buy_in_condition:
+                    if g.day_count % g.period == 0:
+                        log.info("==> 满足条件进行调仓")
+                        buy_stocks = pick_stocks(context, data)
+                        log.info("选股后可买股票: %s" %(buy_stocks))
+                        adjust_position(context, buy_stocks)
+                    g.day_count += 1
+                else:
+                    clear_position(context)
+                    g.day_count = 0
+
+                g.position_change_finished = True
 
 def market_stop_loss_by_price(context, index):
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
