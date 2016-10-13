@@ -136,6 +136,16 @@ def set_param():
         # 参与评分的股票数目
         g.rank_stock_count = 20
 
+        # 股票多头趋势加分项参数
+        g.is_rank_stock_score_plus_allowed = True
+        if g.is_rank_stock_score_plus_allowed:
+            # 加分因子（倍率）
+            g.rank_stock_score_plus_factor = 0.04
+            # 测试多头趋势的均线长度
+            g.ma_lengths = [5,10,20,60,120]
+            # 多头趋势天数
+            g.in_trend_days = 7
+
     # 买入股票数目
     g.buy_stock_count = 2
     
@@ -178,7 +188,7 @@ def set_param():
     g.is_stock_stop_profit = True
     if g.is_stock_stop_profit:
         g.ajust_rate_4_stock_stop_profit = 1.10
-    
+
 def log_param():
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
@@ -593,7 +603,7 @@ def filter_by_growth_rate(stock_list, n):
     return [stock for stock in stock_list if get_growth_rate(stock, n) > 0]
 
 # 股票评分
-def rank_stocks(data, stock_list):
+def rank_stocks(data, stock_list, score_plus_list):
     dst_stocks = {}
     for stock in stock_list:
         h = attribute_history(stock, 130, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
@@ -608,8 +618,13 @@ def rank_stocks(data, stock_list):
 
         score = (cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)
         #score = ((cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)) / cur_price
+        if g.is_rank_stock_score_plus_allowed:
+            if stock in score_plus_list:
+                log.info("股票%s上升形态，加分%f(股价*%f)" 
+                         %(stock, g.rank_stock_score_plus_factor * cur_price, g.rank_stock_score_plus_factor))
+                score -= g.rank_stock_score_plus_factor * cur_price
         dst_stocks[stock] = score
-        
+
     df = pd.DataFrame(dst_stocks.values(), index=dst_stocks.keys())
     df.columns = ['score']
     df = df.sort(columns='score', ascending=True)
@@ -685,13 +700,59 @@ def pick_stocks(context, data):
 
         #log.debug("评分前备选股票: %s" %(stock_list))
         if len(stock_list) > 0:
-            stock_list = rank_stocks(data, stock_list)
+            score_plus_list = []
+            if g.is_rank_stock_score_plus_allowed:
+                score_plus_list = get_in_trends(context, stock_list)
+            stock_list = rank_stocks(data, stock_list, score_plus_list)
         #log.debug("评分后备选股票: %s" %(stock_list))
     
     # 选取指定可买数目的股票
     if len(stock_list) > g.buy_stock_count:
         stock_list = stock_list[:g.buy_stock_count]
     return stock_list
+
+# 获取所有多头趋势股票
+# 输入一list有效股票
+# 输出一list，为所有符合从小到长均线排列从大到小的股票
+def get_in_trends(context, available_stocks):
+    # 建立需要入选的股票list，只要发现股票有两根均线不符合多头趋势，就加入删除名单并停止计算
+    stockselected = []
+    # 对于所有有效股票
+    for security in available_stocks:
+        # 获取最长ma长度
+        longest_ma = max(g.ma_lengths)
+        # 今日日期
+        date = context.current_dt
+        # 获取过去价格
+        all_past_prices = attribute_history(security,longest_ma + g.in_trend_days -1, '1d', 'close',  skip_paused = True)
+        # 对于认定趋势的每一天
+        for day in range(g.in_trend_days):
+            # 筛去尾部的-day天数据
+            if day == 0:
+                past_prices = all_past_prices
+            else:
+                past_prices = all_past_prices[:-day]
+            # 建立空均线值list 
+            mas = []
+            # 对于所有均线长度
+            for length in g.ma_lengths:
+                # 截取相应数据
+                ma_data = past_prices[-length:]
+                # 算均值
+                ma = sum(ma_data).iloc[0]/ length
+                # 计入list 
+                mas.append(ma)
+            # 从大到小排列均值list 
+            sorted_mas = sorted(mas)
+            sorted_mas.reverse()
+            # 如果排列之后和之前不
+            if mas == sorted_mas:
+                # 加入入选名单行列
+                stockselected.append(security)
+                # 不继续进行运算
+                break
+    # 返回趋势股票list 
+    return(stockselected)
 
 # 根据待买股票创建或调整仓位
 # 对于因停牌等原因没有卖出的股票则继续持有
