@@ -170,7 +170,7 @@ def set_param():
     g.check_buy_in_chance_all_day = True
     if g.check_buy_in_chance_all_day:
         # 调仓时间点二八指数20日增幅允许为标准二八指数20日增幅的百分比
-        g.ajust_rate_4_index_growth_rate_20 = 0.68
+        g.ajust_rate_4_index_growth_rate_20 = 0.93
 
     # 配置是否根据大盘历史价格止损
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
@@ -333,9 +333,10 @@ def do_handle_data(context, data):
 
                 # 是否设置了检查全天买入机会的选项
                 if g.check_buy_in_chance_all_day:
+                    # 仓位是否为空仓
                     # 是否全天中有超过标准二八指数20日增幅
                     # 当前调仓时间点指数涨幅超过了标准二八指数20日增幅的一定调整比例
-                    if g.index_growth_rate_over_uplimit \
+                    if context.portfolio.positions_value <= 0 and g.index_growth_rate_over_uplimit \
                         and (gr_index2 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20 \
                             or gr_index8 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20):
                         buy_in_condition = True
