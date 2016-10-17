@@ -170,7 +170,7 @@ def set_param():
     g.check_buy_in_chance_all_day = True
     if g.check_buy_in_chance_all_day:
         # 调仓时间点二八指数20日增幅允许为标准二八指数20日增幅的百分比
-        g.ajust_rate_4_index_growth_rate_20 = 0.93
+        g.ajust_rate_4_index_growth_rate_20 = 0.85
 
     # 配置是否根据大盘历史价格止损
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
@@ -348,11 +348,11 @@ def do_handle_data(context, data):
                         log.info("选股后可买股票: %s" %(buy_stocks))
                         adjust_position(context, buy_stocks)
                     g.day_count += 1
-                else:
+                    g.position_change_finished = True
+                elif context.portfolio.positions_value > 0:
                     clear_position(context)
                     g.day_count = 0
-
-                g.position_change_finished = True
+                    g.position_change_finished = True
 
 def market_stop_loss_by_price(context, index):
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
