@@ -18,8 +18,8 @@
         每日指定时间，计算沪深300指数和中证500指数当前的20日涨幅，如果2个指数涨幅都为负，
         则清仓，重置调仓计数，待下次调仓条件满足再操作
 
-版本：v2.0.5
-日期：2016.08.30
+版本：v2.0.6
+日期：2016.08.31
 作者：Morningstar
 '''
 
@@ -194,7 +194,7 @@ def set_param():
     # 其次，分析历史行情看一般大盘出现三只乌鸦的时候，已经严重滞后了，使用其他止损方式可能会更好
     g.is_market_stop_loss_by_3_black_crows = False
     if g.is_market_stop_loss_by_3_black_crows:
-        g.dst_drop_minute_count = 10
+        g.dst_drop_minute_count = 60
 
     # 配置是否个股止损
     g.is_stock_stop_loss = True
@@ -377,8 +377,8 @@ def market_stop_loss_by_price(context, index):
     return g.is_day_stop_loss_by_price
 
 def market_stop_loss_by_3_black_crows(context, index, n):
-    # 前日三黑鸦，累计当日每分钟涨幅<0的分钟计数
-    # 如果分钟计数超过一定值，则开始进行三黑鸦止损
+    # 前日三黑鸦，累计当日大盘指数涨幅<0的分钟计数
+    # 如果分钟计数超过值n，则开始进行三黑鸦止损
     # 避免无效三黑鸦乱止损
     if g.is_last_day_3_black_crows:
         if get_growth_rate(index, 1) < 0:
@@ -386,7 +386,7 @@ def market_stop_loss_by_3_black_crows(context, index, n):
 
         if g.cur_drop_minute_count >= n:
             if g.cur_drop_minute_count == n:
-                log.info("==> 超过三黑鸦止损开始")
+                log.info("==> 当日%s为跌已超过%d分钟，执行三黑鸦止损" %(get_security_info(index).display_name, n))
 
             clear_position(context)
             g.day_count = 0
@@ -416,23 +416,15 @@ def is_3_black_crows(stock):
 
     if len(h_close) < 4 or len(h_open) < 4:
         return False
- 
-    # 三根阴线
-    if h_close[-4] > h_open[-4] \
-        and (h_close[-1] < h_close[-2] and h_close[-2] < h_close[-3]) \
-        and (h_close[-1] < h_open[-1] and h_close[-2]< h_open[-2] and h_close[-3] < h_open[-3]) \
-        and h_close[-1] / h_close[-3] - 1 < -0.045 and get_current_data(stock)< h_close[-1]*0.995:
-        return True
-    return False
-'''
- # 一阳三阴
+    
+    # 一阳三阴
     if h_close[-4] > h_open[-4] \
         and (h_close[-1] < h_open[-1] and h_close[-2]< h_open[-2] and h_close[-3] < h_open[-3]):
         #and (h_close[-1] < h_close[-2] and h_close[-2] < h_close[-3]) \
         #and h_close[-1] / h_close[-3] - 1 < -0.045:
         return True
     return False
-'''  
+    
 '''
 def is_3_black_crows(stock, data):
     # talib.CDL3BLACKCROWS
@@ -839,11 +831,17 @@ def adjust_position(context, buy_stocks):
 
 更新：
 
+2016.08.31
+
+v2.0.6
+完善三黑鸦判定算法，放宽判定条件，在前日三黑鸦形态下，当日为跌的分钟计数达到指定
+值，则进行止损，此方法主要为了增加三黑鸦的有效性
+
 2016.08.30
 
 v2.0.5
-根据百度百科描述修正三黑鸦算法，根据前4日数据判断，然后根据当日较前日的增幅分钟
-计数判断是否止损，修正潜在bug
+根据百度百科描述修正三黑鸦算法，根据前4日数据判断，在三黑鸦形态下当日为跌的分钟计
+数达到指定值后，进行止损，修正潜在bug
 
 2016.08.19
 
