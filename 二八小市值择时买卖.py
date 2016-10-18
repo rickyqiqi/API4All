@@ -307,18 +307,13 @@ def do_handle_data(context, data):
 
     # 是否当日调仓已经完成
     if not g.position_change_finished:
-        # 是否是指定显示输出涨幅的时点
-        # 是否是调仓时点及其之后的时点
-        if ((hour >= 9 and hour <= 11) and (minute == 30)) \
-            or ((hour >= 13 and hour <= 15) and (minute == 0)) \
-            or (hour == g.adjust_position_hour and minute >= g.adjust_position_minute):
-            log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
-            log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index8).display_name, gr_index8*100))
-
         # 是否是调仓时点及其之后的时点
         # 每天下午14:50调仓
         if hour == g.adjust_position_hour and minute >= g.adjust_position_minute:
-            log.info("调仓日计数 [%d]" %(g.day_count))
+            if minute == g.adjust_position_minute:
+                log.info("调仓日计数 [%d]" %(g.day_count))
+                log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
+                log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index8).display_name, gr_index8*100))
 
             buy_in_condition = (gr_index2 > g.index_growth_rate_20) or (gr_index8 > g.index_growth_rate_20)
 
