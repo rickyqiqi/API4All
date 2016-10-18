@@ -30,6 +30,10 @@ def before_trading_start(context):
     log.info("---------------------------------------------")
     #log.info("==> before trading start @ %s", str(context.current_dt))
 
+    # 盘前显示当日有效黑名单
+    if g.filter_blacklist:
+        log.info("当日股票有效黑名单：%s" %str(get_blacklist(context)))
+
     # 盘前就判断三黑鸦状态，因为判断的数据为前4日
     g.is_last_day_3_black_crows = is_3_black_crows(g.index_4_stop_loss_by_3_black_crows)
     if g.is_last_day_3_black_crows:
@@ -133,7 +137,7 @@ def set_param():
     # 配置是否过滤创业板股票
     g.filter_gem = True
     # 配置是否过滤黑名单股票，回测建议关闭，模拟运行时开启
-    g.filter_blacklist = False
+    g.filter_blacklist = True
 
     # 是否对股票评分
     g.is_rank_stock = True
@@ -218,8 +222,6 @@ def log_param():
     
     log.info("是否过滤创业板股票: %s" %(g.filter_gem))
     log.info("是否过滤黑名单股票: %s" %(g.filter_blacklist))
-    if g.filter_blacklist:
-        log.info("当前股票黑名单：%s" %str(get_blacklist()))
 
     log.info("是否对股票评分选股: %s" %(g.is_rank_stock))
     if g.is_rank_stock:
@@ -645,7 +647,7 @@ def filter_limitdown_stock(context, stock_list):
     
 # 过滤黑名单股票
 def filter_blacklist_stock(context, stock_list):
-    blacklist = get_blacklist()
+    blacklist = get_blacklist(context)
     return [stock for stock in stock_list if stock not in blacklist]
 
 # 过滤创业版股票
