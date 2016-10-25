@@ -25,6 +25,7 @@
 
 import tradestat
 from blacklist import *
+from config import *
 
 def before_trading_start(context):
     log.info("---------------------------------------------")
@@ -672,10 +673,14 @@ def filter_new_stock(stock_list):
 # 选股
 # 选取指定数目的小市值股票，再进行过滤，最终挑选指定可买数目的股票
 def pick_stocks(context, data):
+    # 获取备选股票
+    candidates = get_candidates()
+
     q = None
     if g.pick_by_pe:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
+                valuation.code.in_(candidates),
                 indicator.eps > g.min_eps,
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
@@ -686,6 +691,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).filter(
+                valuation.code.in_(candidates),
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
             ).order_by(
@@ -696,6 +702,7 @@ def pick_stocks(context, data):
     else:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
+                valuation.code.in_(candidates),
                 indicator.eps > g.min_eps
             ).order_by(
                 valuation.market_cap.asc()
@@ -704,6 +711,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).order_by(
+                valuation.code.in_(candidates),
                 valuation.market_cap.asc()
             ).limit(
                 g.pick_stock_count
