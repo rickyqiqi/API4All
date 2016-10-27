@@ -26,6 +26,7 @@
 import tradestat
 from blacklist import *
 from config import *
+from autotraderintf import *
 
 def before_trading_start(context):
     log.info("---------------------------------------------")
@@ -583,7 +584,18 @@ def order_target_value_(security, value):
     # 如果股票停牌，创建报单会失败，order_target_value 返回None
     # 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
     # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
-    return order_target_value(security, value)
+    order = order_target_value(security, value)
+    if order != None and order.filled > 0:
+        filledpos = order.filled
+        if not order.is_buy:
+            filledpos = -filledpos
+        try:
+            # inform auto trader to do the trade
+            traderresp = autotrader_stock_trade(order.security, filledpos, order.price, order.order_id)
+            log.info("Autotrader响应值：%d" % traderresp)
+        except:
+            log.error("AutoTrader通信失败")
+    return order
 
 
 # 过滤停牌股票

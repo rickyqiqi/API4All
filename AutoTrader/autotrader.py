@@ -1,3 +1,4 @@
+import types
 import time
 import hashlib
 import random
@@ -19,12 +20,23 @@ def stocktrade():
         # get the json request string
         json_decode = json.loads(keys[0])
         if 'timestamp' in json_decode \
+          and type(json_decode["timestamp"]) == types.IntType \
           and 'rand' in json_decode \
+          and type(json_decode["rand"]) == types.IntType \
           and 'terminalId' in json_decode \
+          and type(json_decode["terminalId"]) == types.UnicodeType \
           and 'password' in json_decode \
-          and 'tradeSN' in json_decode \
+          and type(json_decode["password"]) == types.UnicodeType \
           and 'txnTime' in json_decode \
-          and 'stocksInfo' in json_decode:
+          and type(json_decode["txnTime"]) == types.UnicodeType \
+          and 'security' in json_decode \
+          and type(json_decode["security"]) == types.UnicodeType \
+          and 'filled' in json_decode \
+          and type(json_decode["filled"]) == types.IntType \
+          and 'price' in json_decode \
+          and type(json_decode["price"]) == types.FloatType \
+          and 'orderId' in json_decode \
+          and type(json_decode["orderId"]) == types.IntType:
             # if current time and request time stamp in range
             currenttime = int(time.time())
             requesttime = json_decode['timestamp']
@@ -36,7 +48,7 @@ def stocktrade():
                 if requesttime != currenttime:
                     print('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
 
-                terminalpasswds = {"600001": "W2Qa9~wc01]lk>3,@jq"}
+                terminalpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
                 # check if the terminal id is valid
                 if json_decode["terminalId"] in terminalpasswds.keys():
                     # calculate the md5 value
@@ -45,15 +57,8 @@ def stocktrade():
                     m2.update(plainpasswd)
                     if json_decode["password"] == m2.hexdigest():
                         ret = True
-                        for stockinfo in json_decode["stocksInfo"]:
-                            if 'stockCode' in stockinfo \
-                              and 'position' in stockinfo \
-                              and 'price' in stockinfo:
-                                print("To set stock %s to position %d, recommended price: %.2f" \
-                                      %(stockinfo["stockCode"], stockinfo["position"], stockinfo["price"]))
-                            else:
-                                ret = False
-                                break
+                        print("To set stock %s to position %d, recommended price: %.2f, orderID: %d" \
+                              %(json_decode["security"], json_decode["filled"], json_decode["price"], json_decode["orderId"]))
                         if ret:
                             # response with success
                             response_data["txnCode"] = 0
