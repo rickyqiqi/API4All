@@ -46,6 +46,11 @@ def after_trading_end(context):
     #log.info("==> after trading end @ %s", str(context.current_dt))
     g.trade_stat.report(context)
 
+    # 模拟实盘情况下执行
+    if g.real_market_simulate:
+        # 删除当天未完成的离线交易记录
+        rm_all_records_offline()
+
     reset_day_param()
     
     # 得到当前未完成订单
@@ -53,9 +58,6 @@ def after_trading_end(context):
     for _order in orders.values():
         log.info("canceled uncompleted order: %s" %(_order.order_id))
     pass
-
-    # 删除当天未完成的离线交易记录
-    rm_all_records_offline()
 
 def initialize(context):
     log.info("==> initialize @ %s", str(context.current_dt))
@@ -67,8 +69,14 @@ def initialize(context):
     # 设定滑点为百分比
     # 没有调用set_slippage函数, 系统默认的滑点是PriceRelatedSlippage(0.00246)
     #set_slippage(PriceRelatedSlippage(0.004))
-    # 使用真实价格回测(模拟盘推荐如此，回测请注释)
-    set_option('use_real_price', True)
+    
+    # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
+    g.real_market_simulate = False
+    runningdatetime = datetime.datetime.fromtimestamp(time.time())
+    if context.current_dt.date() == runningdatetime.date():
+        g.real_market_simulate = True
+        # 使用真实价格回测(模拟盘推荐如此，回测请注释)
+        set_option('use_real_price', True)
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
@@ -277,8 +285,9 @@ def reset_day_param():
 
 # 按分钟回测
 def handle_data(context, data):
-    # 检查离线记录文件是否有未完成的离线交易，完成离线交易
-    do_record_offline()
+    if g.real_market_simulate:
+        # 检查离线记录文件是否有未完成的离线交易，完成离线交易
+        do_record_offline()
 
     if g.is_market_stop_loss_by_price:
         if market_stop_loss_by_price(context, g.index_4_stop_loss_by_price):
@@ -594,7 +603,8 @@ def order_target_value_(security, value):
     # 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
     # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
     order = order_target_value(security, value)
-    if order != None:
+    # 模拟式盘情况下，订单非空
+    if g.real_market_simulate and order != None:
         # inform auto trader to do the trade
         autotrader_stock_trade(order.security, value, order.price, order.order_id)
     return order
