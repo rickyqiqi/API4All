@@ -54,6 +54,9 @@ def after_trading_end(context):
         log.info("canceled uncompleted order: %s" %(_order.order_id))
     pass
 
+    # 删除当天未完成的离线交易记录
+    rm_all_records_offline()
+
 def initialize(context):
     log.info("==> initialize @ %s", str(context.current_dt))
     
@@ -274,6 +277,9 @@ def reset_day_param():
 
 # 按分钟回测
 def handle_data(context, data):
+    # 检查离线记录文件是否有未完成的离线交易，完成离线交易
+    do_record_offline()
+
     if g.is_market_stop_loss_by_price:
         if market_stop_loss_by_price(context, g.index_4_stop_loss_by_price):
             return
@@ -435,8 +441,11 @@ def stock_stop_loss(context, data):
         cur_price = data[stock].close
         xi = attribute_history(stock, 2, '1d', 'high', skip_paused=True)
         ma = xi.max()
-        if g.last_high[stock] < cur_price:
-            g.last_high[stock] = cur_price
+        try:
+            if g.last_high[stock] < cur_price:
+                g.last_high[stock] = cur_price
+        except KeyError:
+            g.last_high[stock] = 0
             
         threshold = get_stop_loss_threshold(stock, g.period)
         #log.debug("个股止损阈值, stock: %s, threshold: %f" %(stock, threshold))
@@ -585,16 +594,9 @@ def order_target_value_(security, value):
     # 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
     # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
     order = order_target_value(security, value)
-    if order != None and order.filled > 0:
-        filledpos = order.filled
-        if not order.is_buy:
-            filledpos = -filledpos
-        try:
-            # inform auto trader to do the trade
-            traderresp = autotrader_stock_trade(order.security, filledpos, order.price, order.order_id)
-            log.info("Autotrader响应值：%d" % traderresp)
-        except:
-            log.error("AutoTrader通信失败")
+    if order != None:
+        # inform auto trader to do the trade
+        autotrader_stock_trade(order.security, value, order.price, order.order_id)
     return order
 
 

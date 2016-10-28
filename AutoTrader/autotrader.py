@@ -31,10 +31,10 @@ def stocktrade():
           and type(json_decode["txnTime"]) == types.UnicodeType \
           and 'security' in json_decode \
           and type(json_decode["security"]) == types.UnicodeType \
-          and 'filled' in json_decode \
-          and type(json_decode["filled"]) == types.IntType \
+          and 'value' in json_decode \
+          and (type(json_decode["value"]) == types.FloatType or type(json_decode["value"]) == types.IntType) \
           and 'price' in json_decode \
-          and type(json_decode["price"]) == types.FloatType \
+          and (type(json_decode["price"]) == types.FloatType or type(json_decode["price"]) == types.IntType) \
           and 'orderId' in json_decode \
           and type(json_decode["orderId"]) == types.IntType:
             # if current time and request time stamp in range
@@ -57,8 +57,8 @@ def stocktrade():
                     m2.update(plainpasswd)
                     if json_decode["password"] == m2.hexdigest():
                         ret = True
-                        print("To set stock %s to position %d, recommended price: %.2f, orderID: %d" \
-                              %(json_decode["security"], json_decode["filled"], json_decode["price"], json_decode["orderId"]))
+                        print("To set stock %s to value %.2f, recommended price: %.2f, orderID: %d" \
+                              %(json_decode["security"], json_decode["value"], json_decode["price"], json_decode["orderId"]))
                         if ret:
                             # response with success
                             response_data["txnCode"] = 0
