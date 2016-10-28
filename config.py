@@ -13,7 +13,10 @@ def get_candidates():
     # 指数池，默认沪深300指数
     indexpool = ["000300.XSHG", "000905.XSHG"]
     # 配置文件名称
-    configfilename = 'config.json'
+    if g.real_market_simulate:
+        configfilename = 'realmarket.conf'
+    else:
+        configfilename = 'loopback.conf'
 
     try:
         jsoncontent = read_file(configfilename)
