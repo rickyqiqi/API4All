@@ -673,16 +673,16 @@ def rank_stocks(data, stock_list, score_plus_list):
         #avg_15 = h['close'][-15:].mean()
         #cur_price = get_close_price(stock, 1, '1m')
 
-        score = (cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)
-        #score = ((cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)) / cur_price
+        #score = (cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)
+        score = ((cur_price-low_price_130) + (cur_price-high_price_130) + (cur_price-avg_15)) / cur_price
         if g.is_rank_stock_score_plus_allowed:
             if stock in score_plus_list:
-                log.info("股票%s上升形态，加分%f(股价*%f)" 
-                         %(stock, g.rank_stock_score_plus_factor * cur_price, g.rank_stock_score_plus_factor))
-                score -= g.rank_stock_score_plus_factor * cur_price
                 #log.info("股票%s上升形态，加分%f(股价*%f)" 
-                #         %(stock, g.rank_stock_score_plus_factor, g.rank_stock_score_plus_factor))
-                #score -= g.rank_stock_score_plus_factor
+                #         %(stock, g.rank_stock_score_plus_factor * cur_price, g.rank_stock_score_plus_factor))
+                #score -= g.rank_stock_score_plus_factor * cur_price
+                log.info("股票%s上升形态，加分%f(股价*%f)" 
+                         %(stock, g.rank_stock_score_plus_factor, g.rank_stock_score_plus_factor))
+                score -= g.rank_stock_score_plus_factor
         dst_stocks[stock] = score
 
     df = pd.DataFrame(dst_stocks.values(), index=dst_stocks.keys())
