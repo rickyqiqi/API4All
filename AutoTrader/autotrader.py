@@ -43,10 +43,10 @@ def stocktrade():
             if abs(currenttime-requesttime) > 10:
                 # response with time stamp error
                 response_data["txnCode"] = 2
-                print('Request time stamp %d out of range' %requesttime)
+                app.logger.error('Request time stamp %d out of range' %requesttime)
             else:
                 if requesttime != currenttime:
-                    print('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
+                    app.logger.error('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
 
                 terminalpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
                 # check if the terminal id is valid
@@ -57,7 +57,7 @@ def stocktrade():
                     m2.update(plainpasswd)
                     if json_decode["password"] == m2.hexdigest():
                         ret = True
-                        print("To set stock %s to value %.2f, recommended price: %.2f, orderID: %d" \
+                        app.logger.debug("To set stock %s to value %.2f, recommended price: %.2f, orderID: %d" \
                               %(json_decode["security"], json_decode["value"], json_decode["price"], json_decode["orderId"]))
                         if ret:
                             # response with success
@@ -68,11 +68,11 @@ def stocktrade():
                     else:
                         # response with password error
                         response_data["txnCode"] = 7
-                        print('Password error')
+                        app.logger.error('Password error')
                 else:
                     # response with terminal invalid
                     response_data["txnCode"] = 6
-                    print('Invalid terminal')
+                    app.logger.error('Invalid terminal')
         else:
             # response with parameters error
             response_data["txnCode"] = 1

@@ -680,6 +680,9 @@ def rank_stocks(data, stock_list, score_plus_list):
                 log.info("股票%s上升形态，加分%f(股价*%f)" 
                          %(stock, g.rank_stock_score_plus_factor * cur_price, g.rank_stock_score_plus_factor))
                 score -= g.rank_stock_score_plus_factor * cur_price
+                #log.info("股票%s上升形态，加分%f(股价*%f)" 
+                #         %(stock, g.rank_stock_score_plus_factor, g.rank_stock_score_plus_factor))
+                #score -= g.rank_stock_score_plus_factor
         dst_stocks[stock] = score
 
     df = pd.DataFrame(dst_stocks.values(), index=dst_stocks.keys())
