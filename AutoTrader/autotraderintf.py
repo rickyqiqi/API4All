@@ -48,11 +48,11 @@ def do_record_offline():
     # 检查离线记录文件是否有未完成的离线交易
     record_offline = get_record_offline()
     if record_offline != None:
-        log.info("记录类型: %s， 记录内容：%s" %(record_offline[0], record_offline[1]))
+        #log.info("记录类型: %s， 记录内容：%s" %(record_offline[0], record_offline[1]))
         # 重发离线交易记录
         if record_offline[0] == "stocktrade":
-            requrl = 'http://139.196.50.19:5000/stocktrade'
-            log.info("URL: %s" %(requrl))
+            requrl = 'http://139.196.50.19/stocktrade'
+            #log.info("URL: %s" %(requrl))
 
             msg_data = json.loads(record_offline[1])
 
@@ -67,14 +67,14 @@ def do_record_offline():
             msg_data["password"] = m1.hexdigest()
 
             json_data = json.dumps(msg_data)
-            log.info("Request: %s" %(json_data))
+            #log.info("Request: %s" %(json_data))
 
             txncode = 1
             try:
                 req = urllib2.Request(url = requrl, data = json_data)
                 res_data = urllib2.urlopen(req)
                 response = res_data.read()
-                log.info("Response: %s" %(response))
+                #log.info("Response: %s" %(response))
 
                 # get the json request string
                 json_decode = json.loads(response)

@@ -36,6 +36,11 @@ def before_trading_start(context):
     if g.filter_blacklist:
         log.info("当日股票有效黑名单：%s" %str(get_blacklist(context)))
 
+    # 是否根据账户总金额下跌率止损
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        # 初始化当日总资金金额
+        init_portfolio_value_high()
+
     # 盘前就判断三黑鸦状态，因为判断的数据为前4日
     g.is_last_day_3_black_crows = is_3_black_crows(g.index_4_stop_loss_by_3_black_crows)
     if g.is_last_day_3_black_crows:
@@ -92,6 +97,12 @@ def initialize(context):
 
     # 缓存股票持仓后的最高价
     g.last_high = {}
+    
+    # 是否根据账户总金额下跌率止损
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        # 缓存近n天最高市值
+        g.last_ndays_portfolio_value_high = [0 for i in range(g.last_portfolio_value_high_days)]
+        g.cur_portfolio_drop_minute_count = 0
 
     # 如下参数不能更改
     if g.is_market_stop_loss_by_price:
@@ -218,6 +229,15 @@ def set_param():
     if g.is_stock_stop_profit:
         g.ajust_rate_4_stock_stop_profit = 1.10
 
+    # 配置是否根据账户总金额下跌率止损
+    g.is_stop_loss_by_portfolio_loss_rate = False
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        # 统计账户总金额的连续交易日数量
+        g.last_portfolio_value_high_days = 20
+        # 出发账户止损的总金额下跌率
+        g.stop_portfolio_loss_rate = 0.90
+        g.dst_portfolio_drop_minute_count = 60
+
 def log_param():
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
@@ -263,8 +283,16 @@ def log_param():
     if g.is_stock_stop_profit:
         log.info("个股止盈调整倍率: %s" %(g.ajust_rate_4_stock_stop_profit))
 
+    log.info("是否开启根据账户总金额下跌率止损: %s" %(g.is_stop_loss_by_portfolio_loss_rate))
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        log.info("账户总金额下跌至连续%02d日最高总金额的下跌止损率: %2.2f%%, 持续分钟数: %d" %(g.last_portfolio_value_high_days, (1-g.stop_portfolio_loss_rate)*100, g.dst_portfolio_drop_minute_count))
+
 # 重置当日参数，仅针对需要当日需要重置的参数
 def reset_day_param():
+    # 是否根据账户总金额下跌率止损
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        g.cur_portfolio_drop_minute_count = 0
+
     if g.is_market_stop_loss_by_price:
         # 重置当日大盘价格止损状态
         g.is_day_stop_loss_by_price = False
@@ -283,11 +311,45 @@ def reset_day_param():
     # 复位当日涨幅超出过设定调仓的二八指数20日增幅标志
     g.index_growth_rate_over_uplimit = False
 
+# 初始化近n日总资金金额
+def init_portfolio_value_high():
+    for i in range(g.last_portfolio_value_high_days-1):
+        g.last_ndays_portfolio_value_high[i] = g.last_ndays_portfolio_value_high[i+1]
+    g.last_ndays_portfolio_value_high[g.last_portfolio_value_high_days-1] = 0
+
+# 设置近n日中当日总资金金额最高值
+def set_portfolio_value_high(current_portfolio_value):
+    if g.last_ndays_portfolio_value_high[g.last_portfolio_value_high_days-1] < current_portfolio_value:
+        g.last_ndays_portfolio_value_high[g.last_portfolio_value_high_days-1] = current_portfolio_value
+
+# 判断是否执行根据资金总额下跌率止损
+def stop_loss_by_portfolio_loss_rate(context):
+    max_portfolio_value_high = max(g.last_ndays_portfolio_value_high)
+    if context.portfolio.portfolio_value < max_portfolio_value_high * g.stop_portfolio_loss_rate:
+        g.cur_portfolio_drop_minute_count += 1
+
+    if g.cur_portfolio_drop_minute_count >= g.dst_portfolio_drop_minute_count:
+        if g.cur_portfolio_drop_minute_count == g.dst_portfolio_drop_minute_count:
+            log.info("==> 当前资金总额下跌已低于数日内最高资金总额的止损倍数超过%d分钟, 当前资金总额: %f, 最高资金总额: %f" %(g.dst_portfolio_drop_minute_count, context.portfolio.portfolio_value, max_portfolio_value_high))
+
+        clear_position(context)
+        g.day_count = 0
+        return True
+    return False
+
 # 按分钟回测
 def handle_data(context, data):
     if g.real_market_simulate:
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
         do_record_offline()
+
+    # 是否根据账户总金额下跌率止损
+    if g.is_stop_loss_by_portfolio_loss_rate:
+        # 设置近n日中当日总资金金额最高值
+        set_portfolio_value_high(context.portfolio.portfolio_value)
+        # 当前总资金金额低于近n日中最高值的止损倍数，止损
+        if stop_loss_by_portfolio_loss_rate(context):
+            return
 
     if g.is_market_stop_loss_by_price:
         if market_stop_loss_by_price(context, g.index_4_stop_loss_by_price):
