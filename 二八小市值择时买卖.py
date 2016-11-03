@@ -234,8 +234,8 @@ def set_param():
     if g.is_stop_loss_by_portfolio_loss_rate:
         # 统计账户总金额的连续交易日数量
         g.last_portfolio_value_high_days = 20
-        # 出发账户止损的总金额下跌率
-        g.stop_portfolio_loss_rate = 0.90
+        # 触发账户止损的总金额下跌率
+        g.stop_portfolio_loss_rate = 0.85
         g.dst_portfolio_drop_minute_count = 60
 
 def log_param():
