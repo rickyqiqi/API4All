@@ -16,19 +16,66 @@ from kuanke.user_space_api import *
 # price: 平均成交价格, 已经成交的股票的平均成交价格(一个订单可能分多次成交)
 # order_id: 订单ID
 # 返回值：无
-def autotrader_stock_trade(security, value, price, orderid):
+def autotrader_online_status(status):
     msg_data = {}
-
-    terminalpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
 
     msg_data["timestamp"] = int(time.time())
     msg_data["rand"] = random.randrange(-2147483647, 2147483647)
-    msg_data["terminalId"] = "19780112"
+    msg_data["status"] = 0
+
+    json_data = json.dumps(msg_data)
+    #log.info("Request: %s" %(json_data))
+
+    requrl = 'http://139.196.50.19/autotrader/onlinestatus'
+
+    txncode = 1
+    try:
+        req = urllib2.Request(url = requrl, data = json_data)
+        res_data = urllib2.urlopen(req)
+        response = res_data.read()
+        #log.info("Response: %s" %(response))
+
+        # get the json request string
+        json_decode = json.loads(response)
+        if 'timestamp' in json_decode \
+          and type(json_decode["timestamp"]) == types.IntType \
+          and 'rand' in json_decode \
+          and type(json_decode["rand"]) == types.IntType \
+          and 'txnCode' in json_decode \
+          and type(json_decode["txnCode"]) == types.IntType:
+            # if current time and request time stamp in range
+            currenttime = int(time.time())
+            responsetime = json_decode['timestamp']
+            if abs(currenttime-responsetime) > 10:
+                # response with time stamp error
+                log.error('Autotrader服务器响应时间戳(%d)超时' %responsetime)
+            else:
+                txncode = json_decode["txnCode"]
+                #log.info("Autotrader服务器在线状态响应值：%d" %(txncode))
+    except:
+        log.error('Autotrader服务器通信失败')
+
+# autotraderintf.py
+# autotrader股票记录交易
+# security: 股票代码
+# value: 股票仓位总值
+# price: 平均成交价格, 已经成交的股票的平均成交价格(一个订单可能分多次成交)
+# order_id: 订单ID
+# 返回值：无
+def autotrader_stock_trade(security, value, price, orderid):
+    msg_data = {}
+
+    accountpasswords = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
+
+    msg_data["timestamp"] = int(time.time())
+    msg_data["rand"] = random.randrange(-2147483647, 2147483647)
+    msg_data["accountNo"] = "19780112"
     # calculate the md5 value
     m1 = hashlib.md5()
-    plainpasswd = str(msg_data["timestamp"]) + str(msg_data["rand"]) + terminalpasswds[msg_data["terminalId"]]
+    plainpasswd = str(msg_data["timestamp"]) + str(msg_data["rand"]) + accountpasswords[msg_data["accountNo"]]
     m1.update(plainpasswd)
     msg_data["password"] = m1.hexdigest()
+    msg_data["marketCode"] = 'cn'
     msg_data["txnTime"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     msg_data["security"] = security
     msg_data["value"] = value
@@ -51,18 +98,18 @@ def do_record_offline():
         #log.info("记录类型: %s， 记录内容：%s" %(record_offline[0], record_offline[1]))
         # 重发离线交易记录
         if record_offline[0] == "stocktrade":
-            requrl = 'http://139.196.50.19/stocktrade'
+            requrl = 'http://139.196.50.19/autotrader/stocktrade'
             #log.info("URL: %s" %(requrl))
 
             msg_data = json.loads(record_offline[1])
 
-            terminalpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
+            accountpasswords = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
 
             msg_data["timestamp"] = int(time.time())
             msg_data["rand"] = random.randrange(-2147483647, 2147483647)
             # calculate the md5 value
             m1 = hashlib.md5()
-            plainpasswd = str(msg_data["timestamp"]) + str(msg_data["rand"]) + terminalpasswds[msg_data["terminalId"]]
+            plainpasswd = str(msg_data["timestamp"]) + str(msg_data["rand"]) + accountpasswords[msg_data["accountNo"]]
             m1.update(plainpasswd)
             msg_data["password"] = m1.hexdigest()
 
@@ -83,18 +130,18 @@ def do_record_offline():
                   and 'rand' in json_decode \
                   and type(json_decode["rand"]) == types.IntType \
                   and 'txnCode' in json_decode \
-                  and type(json_decode["rand"]) == types.IntType:
+                  and type(json_decode["txnCode"]) == types.IntType:
                     # if current time and request time stamp in range
                     currenttime = int(time.time())
                     responsetime = json_decode['timestamp']
                     if abs(currenttime-responsetime) > 10:
                         # response with time stamp error
-                        log.error('响应时间戳(%d)超时' %responsetime)
+                        log.error('Autotrader服务器响应时间戳(%d)超时' %responsetime)
                     else:
                         txncode = json_decode["txnCode"]
-                        log.info("Autotrader响应值：%d" %(txncode))
+                        log.info("Autotrader服务器股票交易响应值：%d" %(txncode))
             except:
-                log.error('autotrader服务器通信失败')
+                log.error('Autotrader服务器通信失败')
             # delete the offline json data if response OK
             if txncode == 0:
                 # 删除这条离线记录

@@ -79,9 +79,9 @@ def initialize(context):
     g.real_market_simulate = False
     runningdatetime = datetime.datetime.fromtimestamp(time.time())
     if context.current_dt.date() == runningdatetime.date():
-        g.real_market_simulate = True
         # 使用真实价格回测(模拟盘推荐如此，回测请注释)
         set_option('use_real_price', True)
+        g.real_market_simulate = True
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
@@ -340,6 +340,8 @@ def stop_loss_by_portfolio_loss_rate(context):
 # 按分钟回测
 def handle_data(context, data):
     if g.real_market_simulate:
+        # 检查服务器在线状态
+        autotrader_online_status(0)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
         do_record_offline()
 
