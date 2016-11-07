@@ -1,6 +1,3 @@
-#ifndef _AESAPI_H_
-#define _AESAPI_H_
-
 /*****************************************************************************/
 /*                                                                           */
 /*    Copyright (C) -                              - All rights reserved     */
@@ -46,6 +43,9 @@
 /*  Include Files                                                            */
 /*                                                                           */
 /*****************************************************************************/
+#include <stdio.h>
+#include <string.h>
+#include "AESApi.h"
 
 
 /*****************************************************************************/
@@ -66,12 +66,30 @@
 /*                                                                           */
 /*  Function Declarations                                                    */
 /*                                                                           */
-/*****************************************************************************/                        
-char *AESEncrypt(char *str);
-char *AESDecrypt(char *base64);
-void AESFreeMem(char *ptr);
+/*****************************************************************************/
 
 
-#endif  // _AESAPI_H_
+/*****************************************************************************/
+/*                                                                           */
+/*  Function Implementations                                                 */
+/*                                                                           */
+/*****************************************************************************/
+int main(int argc, char* argv[])
+{
+    char *plainstr = "plain text string";
+    // encrypt
+    char *encryptstr = AESEncrypt(plainstr);
+    // decrypt
+    char *decryptstr = AESDecrypt(encryptstr);
+    
+    if(strcmp(plainstr, decryptstr) == 0) {
+        printf("Encryption and Decryption OK\n");
+    } else {
+        printf("Encryption and Decryption Failed!\n");
+    }
+    // Free string memory
+    AESFreeMem(encryptstr);
+    AESFreeMem(decryptstr);
 
-
+    return 0;
+}
