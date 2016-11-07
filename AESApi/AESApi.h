@@ -69,7 +69,6 @@
 /*****************************************************************************/                        
 char *AESEncrypt(char *str);
 char *AESDecrypt(char *base64);
-void AESFreeMem(char *ptr);
 
 
 #endif  // _AESAPI_H_

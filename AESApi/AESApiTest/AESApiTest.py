@@ -1,16 +1,9 @@
 #! /usr/bin/python
 
-from ctypes import *
+from AESApi import *
 
-libpoint = CDLL("./libAESApi.so")
-plainstr = create_string_buffer(b"plain text string") 
-print sizeof(plainstr), repr(plainstr.raw)
-# encrypt
-encryptstr = libpoint.AESEncrypt(plainstr)
-print encryptstr
-# decrypt
-decryptstr = libpoint.AESDecrypt(encryptstr)
-print decryptstr
-# Free string memory
-libpoint.AESFreeMem(encryptstr)
-libpoint.AESFreeMem(decryptstr)
+plain = "plain text string"
+encrypt = AESEncrypt(plain)
+print encrypt
+decrypt = AESDecrypt(encrypt)
+print decrypt

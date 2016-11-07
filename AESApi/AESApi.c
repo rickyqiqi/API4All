@@ -50,6 +50,7 @@
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h> 
+#include <Python.h>
 #include "AESApi.h"
 
 
@@ -132,10 +133,16 @@ static char* Base64Decode(char* input, int length, char* output, int* outlength)
     return output;
 }
 
-char *AESEncrypt(char *str)
+/*
+ * Function to be called from Python
+ */
+static PyObject* py_AESEncrypt(PyObject* self, PyObject* args)
 {
+    char *str = malloc(1024);
     if(str == NULL)
-        return NULL;
+        return Py_BuildValue("s", NULL);
+
+    PyArg_ParseTuple(args, "s", &str);
 
     // calculate the length of the AES calculation, the input string should be 8 bytes 
     // assigned
@@ -185,7 +192,10 @@ char *AESEncrypt(char *str)
                 // remove the last '\n'
                 encryptDataBase64[outlen-1] = 0;
 
-                return encryptDataBase64;
+                PyObject* ret = Py_BuildValue("s", encryptDataBase64);
+                free(encryptDataBase64);
+
+                return ret;
             } else {
                 printf("Allocate encrypt data buffer error");
             }
@@ -200,13 +210,19 @@ char *AESEncrypt(char *str)
         printf("Allocate padding data buffer error");
     }
 
-    return NULL;
+    return Py_BuildValue("s", NULL);
 }
 
-char *AESDecrypt(char *base64)
+/*
+ * Function to be called from Python
+ */
+static PyObject* py_AESDecrypt(PyObject* self, PyObject* args)
 {
+    char *base64 = malloc(1024);
     if(base64 == NULL)
-        return NULL;
+        return Py_BuildValue("s", NULL);
+
+    PyArg_ParseTuple(args, "s", &base64);
 
     // calculate the length of the AES calculation, the input string should be 8 bytes 
     // assigned
@@ -233,7 +249,10 @@ char *AESDecrypt(char *base64)
                 int paddingbytes = (responseData[outlen-1]<outlen) ? responseData[outlen-1]: outlen;
                 responseData[outlen-paddingbytes] = 0;
 
-                return responseData;
+                PyObject* ret = Py_BuildValue("s", responseData);
+                free(responseData);
+
+                return ret;
             } else {
                 printf("Allocate encrypt data buffer error");
             }
@@ -248,14 +267,22 @@ char *AESDecrypt(char *base64)
         printf("Allocate encrypt data buffer error");
     }
 
-    return NULL;
+    return Py_BuildValue("s", NULL);
 }
 
-void AESFreeMem(char *ptr)
+/*
+ * Bind Python function names to our C functions
+ */
+static PyMethodDef AESApi_methods[] = {
+    {"AESEncrypt", py_AESEncrypt, METH_VARARGS},
+    {"AESDecrypt", py_AESDecrypt, METH_VARARGS},
+    {NULL, NULL}
+};
+
+/*
+ * Python calls this to let us initialize our module
+ */
+void initAESApi()
 {
-    if(ptr != NULL)
-    {
-        free(ptr);
-        ptr = NULL;
-    }       
+    (void) Py_InitModule("AESApi", AESApi_methods);
 }

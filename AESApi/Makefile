@@ -27,13 +27,13 @@ CFLAGS	    += -g -Wall $(DEFINES)
 else
 CFLAGS	    += -O2 -Wall -DNDEBUG $(DEFINES)
 endif
-CFLAGS      += -pthread -I./
+CFLAGS      += -I./ -I/usr/include/python2.6/
 
 # here to add "-Wl,-Bsymbolic" to avoid symbolic confilict in different 
 # libraries in using same variable or function names
-LDFLAGS     += -Wl,-Bsymbolic -fPIC -shared 
+LDFLAGS     += -Wl,-Bsymbolic -fPIC -shared -lpython2.6
 
-TGT         = $$PWD/AESApiTest/libAESApi.so
+TGT         = $$PWD/AESApiTest/AESApi.so
 CSRC        = 
 CXXSRC      = ./AESApi.cpp
 
