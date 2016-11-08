@@ -1,5 +1,6 @@
 #coding=utf-8
 
+import types
 import json
 from kuanke.user_space_api import *
 
@@ -43,3 +44,38 @@ def get_candidates():
             candidates = list(get_all_securities(['stock']).index)
 
     return candidates
+
+# 获取配置值
+def get_variables_updated(addstring):
+    # 配置值文件
+    if g.real_market_simulate:
+        configfilename = 'varreal%s.conf' %(addstring)
+    else:
+        configfilename = 'varloop%s.conf' %(addstring)
+
+    try:
+        jsoncontent = read_file(configfilename)
+        content = json.loads(jsoncontent)
+
+        if 'version' in content and type(content["version"]) == types.FloatType:
+            version = content["version"]
+            # 更新初始化函数里的赋值
+            if version > g.version:
+                # 需更新的数值写在这
+                if 'g.is_rank_stock_score_plus_allowed' in content and type(content["g.is_rank_stock_score_plus_allowed"]) == types.BooleanType:
+                    g.is_rank_stock_score_plus_allowed = content["g.is_rank_stock_score_plus_allowed"]
+                if 'g.buy_stock_count' in content and type(content["g.buy_stock_count"]) == types.IntType:
+                    g.buy_stock_count = content["g.buy_stock_count"]
+                if 'g.is_stop_loss_by_portfolio_loss_rate' in content and type(content["g.is_stop_loss_by_portfolio_loss_rate"]) == types.BooleanType:
+                    g.is_stop_loss_by_portfolio_loss_rate = content["g.is_stop_loss_by_portfolio_loss_rate"]
+                if 'g.is_mail_inform_enabled' in content and type(content["g.is_mail_inform_enabled"]) == types.BooleanType:
+                    g.is_mail_inform_enabled = content["g.is_mail_inform_enabled"]
+                if 'g.is_autotrader_inform_enabled' in content and type(content["g.is_autotrader_inform_enabled"]) == types.BooleanType:
+                    g.is_autotrader_inform_enabled = content["g.is_autotrader_inform_enabled"]
+
+                g.version = version
+                return True
+    except:
+        log.error("配置文件%s读取错误" %(configfilename))
+
+    return False

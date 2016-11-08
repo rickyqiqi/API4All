@@ -53,7 +53,7 @@ def after_trading_end(context):
     g.trade_stat.report(context)
 
     # 模拟实盘情况下执行
-    if g.real_market_simulate:
+    if g.real_market_simulate and g.is_autotrader_inform_enabled:
         # 删除当天未完成的离线交易记录
         rm_all_records_offline()
 
@@ -75,7 +75,13 @@ def initialize(context):
     # 设定滑点为百分比
     # 没有调用set_slippage函数, 系统默认的滑点是PriceRelatedSlippage(0.00246)
     #set_slippage(PriceRelatedSlippage(0.004))
-    
+
+    # 参数版本号
+    g.version = 0.0
+
+    # additional string in variable configuration file name
+    g.addstring = "7stocks"
+
     # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
     g.real_market_simulate = False
     runningdatetime = datetime.datetime.fromtimestamp(time.time())
@@ -181,7 +187,7 @@ def set_param():
             g.in_trend_days = 7
 
     # 买入股票数目
-    g.buy_stock_count = 7
+    g.buy_stock_count = 2
     
     # 配置二八指数
     #g.index2 = '000300.XSHG'  # 沪深300指数，表示二，大盘股
@@ -239,7 +245,13 @@ def set_param():
         g.stop_portfolio_loss_rate = 0.82
         g.dst_portfolio_drop_minute_count = 60
 
+    # 配置是否开启邮件通知
+    g.is_mail_inform_enabled = True
+    # 配置是否开启autotrader通知
+    g.is_autotrader_inform_enabled = True
+
 def log_param():
+    log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
 
@@ -287,6 +299,9 @@ def log_param():
     log.info("是否开启根据账户总金额下跌率止损: %s" %(g.is_stop_loss_by_portfolio_loss_rate))
     if g.is_stop_loss_by_portfolio_loss_rate:
         log.info("账户总金额下跌至连续%02d日最高总金额的下跌止损率: %2.2f%%, 持续分钟数: %d" %(g.last_portfolio_value_high_days, (1-g.stop_portfolio_loss_rate)*100, g.dst_portfolio_drop_minute_count))
+
+    log.info("是否开启邮件通知: %s" %(g.is_mail_inform_enabled))
+    log.info("是否开启autotrader通知: %s" %(g.is_autotrader_inform_enabled))
 
 # 重置当日参数，仅针对需要当日需要重置的参数
 def reset_day_param():
@@ -340,7 +355,12 @@ def stop_loss_by_portfolio_loss_rate(context):
 
 # 按分钟回测
 def handle_data(context, data):
-    if g.real_market_simulate:
+    # 检查变量是否在文件中更新
+    if get_variables_updated(g.addstring):
+        # 打印策略参数
+        log_param()
+
+    if g.real_market_simulate and g.is_autotrader_inform_enabled:
         # 检查服务器在线状态
         autotrader_online_status(0)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
@@ -674,10 +694,12 @@ def order_target_value_(context, security, value):
         posInPercent = value/context.portfolio.total_value
         curr_data = get_current_data()
         secname = curr_data[order.security].name
-        # mail to inform clients
-        mail_to_clients(order.security, secname, posInPercent, order.price, tradedatetime, '小市值策略改进版')
-        # inform auto trader to do the trade
-        autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+        if g.is_mail_inform_enabled:
+            # mail to inform clients
+            mail_to_clients(order.security, secname, posInPercent, order.price, tradedatetime, '小市值策略改进版')
+        if g.is_autotrader_inform_enabled:
+            # inform auto trader to do the trade
+            autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
     return order
 
 
