@@ -76,6 +76,8 @@ def stocktrade():
           and type(json_decode["txnTime"]) == types.UnicodeType \
           and 'security' in json_decode \
           and type(json_decode["security"]) == types.UnicodeType \
+          and 'secname' in json_decode \
+          and type(json_decode["secname"]) == types.UnicodeType \
           and 'value' in json_decode \
           and (type(json_decode["value"]) == types.FloatType or type(json_decode["value"]) == types.IntType) \
           and 'price' in json_decode \
@@ -103,8 +105,8 @@ def stocktrade():
                     if json_decode["password"] == m2.hexdigest():
                         if json_decode["marketCode"] == "cn":
                             ret = True
-                            app.logger.debug("To set stock %s to value %.2f, recommended price: %.2f, orderID: %d" \
-                                  %(json_decode["security"], json_decode["value"], json_decode["price"], json_decode["orderId"]))
+                            app.logger.debug("To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
+                                  %(json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
                             if ret:
                                 # response with success
                                 response_data["txnCode"] = 0

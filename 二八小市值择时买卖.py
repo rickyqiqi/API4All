@@ -27,6 +27,7 @@ import tradestat
 from blacklist import *
 from config import *
 from autotraderintf import *
+from mailintf import *
 
 def before_trading_start(context):
     log.info("---------------------------------------------")
@@ -180,7 +181,7 @@ def set_param():
             g.in_trend_days = 7
 
     # 买入股票数目
-    g.buy_stock_count = 2
+    g.buy_stock_count = 7
     
     # 配置二八指数
     #g.index2 = '000300.XSHG'  # 沪深300指数，表示二，大盘股
@@ -230,12 +231,12 @@ def set_param():
         g.ajust_rate_4_stock_stop_profit = 1.10
 
     # 配置是否根据账户总金额下跌率止损
-    g.is_stop_loss_by_portfolio_loss_rate = False
+    g.is_stop_loss_by_portfolio_loss_rate = True
     if g.is_stop_loss_by_portfolio_loss_rate:
         # 统计账户总金额的连续交易日数量
-        g.last_portfolio_value_high_days = 20
+        g.last_portfolio_value_high_days = 5
         # 触发账户止损的总金额下跌率
-        g.stop_portfolio_loss_rate = 0.85
+        g.stop_portfolio_loss_rate = 0.82
         g.dst_portfolio_drop_minute_count = 60
 
 def log_param():
@@ -325,12 +326,12 @@ def set_portfolio_value_high(current_portfolio_value):
 # 判断是否执行根据资金总额下跌率止损
 def stop_loss_by_portfolio_loss_rate(context):
     max_portfolio_value_high = max(g.last_ndays_portfolio_value_high)
-    if context.portfolio.portfolio_value < max_portfolio_value_high * g.stop_portfolio_loss_rate:
+    if context.portfolio.total_value < max_portfolio_value_high * g.stop_portfolio_loss_rate:
         g.cur_portfolio_drop_minute_count += 1
 
     if g.cur_portfolio_drop_minute_count >= g.dst_portfolio_drop_minute_count:
         if g.cur_portfolio_drop_minute_count == g.dst_portfolio_drop_minute_count:
-            log.info("==> 当前资金总额下跌已低于数日内最高资金总额的止损倍数超过%d分钟, 当前资金总额: %f, 最高资金总额: %f" %(g.dst_portfolio_drop_minute_count, context.portfolio.portfolio_value, max_portfolio_value_high))
+            log.info("==> 当前资金总额下跌已低于数日内最高资金总额的止损倍数超过%d分钟, 当前资金总额: %f, 最高资金总额: %f" %(g.dst_portfolio_drop_minute_count, context.portfolio.total_value, max_portfolio_value_high))
 
         clear_position(context)
         g.day_count = 0
@@ -348,7 +349,7 @@ def handle_data(context, data):
     # 是否根据账户总金额下跌率止损
     if g.is_stop_loss_by_portfolio_loss_rate:
         # 设置近n日中当日总资金金额最高值
-        set_portfolio_value_high(context.portfolio.portfolio_value)
+        set_portfolio_value_high(context.portfolio.total_value)
         # 当前总资金金额低于近n日中最高值的止损倍数，止损
         if stop_loss_by_portfolio_loss_rate(context):
             return
@@ -527,7 +528,7 @@ def stock_stop_loss(context, data):
                 %(stock, cur_price, g.last_high[stock], threshold))
 
             position = context.portfolio.positions[stock]
-            if close_position(position):
+            if close_position(context, position):
                 g.day_count = 0
 
 # 个股止盈
@@ -542,7 +543,7 @@ def stock_stop_profit(context, data):
                 %(stock, cur_price, g.last_high[stock], threshold))
 
             position = context.portfolio.positions[stock]
-            if close_position(position):
+            if close_position(context, position):
                 g.day_count = 0
 
 # 获取个股前n天的m日增幅值序列
@@ -616,8 +617,8 @@ def get_close_price(security, n, unit='1d'):
 # 开仓，买入指定价值的证券
 # 报单成功并成交（包括全部成交或部分成交，此时成交量大于0），返回True
 # 报单失败或者报单成功但被取消（此时成交量等于0），返回False
-def open_position(security, value):
-    order = order_target_value_(security, value)
+def open_position(context, security, value):
+    order = order_target_value_(context, security, value)
     if order != None and order.filled > 0:
         # 报单成功并有成交则初始化最高价
         cur_price = get_close_price(security, 1, '1m')
@@ -628,9 +629,9 @@ def open_position(security, value):
 # 平仓，卖出指定持仓
 # 平仓成功并全部成交，返回True
 # 报单失败或者报单成功但被取消（此时成交量等于0），或者报单非全部成交，返回False
-def close_position(position):
+def close_position(context, position):
     security = position.security
-    order = order_target_value_(security, 0) # 可能会因停牌失败
+    order = order_target_value_(context, security, 0) # 可能会因停牌失败
     if order != None:
         if order.filled > 0:
             # 只要有成交，无论全部成交还是部分成交，则统计盈亏
@@ -652,12 +653,12 @@ def clear_position(context):
         log.info("==> 清仓，卖出所有股票")
         for stock in context.portfolio.positions.keys():
             position = context.portfolio.positions[stock]
-            close_position(position)
+            close_position(context, position)
 
 # 自定义下单
 # 根据Joinquant文档，当前报单函数都是阻塞执行，报单函数（如order_target_value）返回即表示报单完成
 # 报单成功返回报单（不代表一定会成交），否则返回None
-def order_target_value_(security, value):
+def order_target_value_(context, security, value):
     if value == 0:
         log.debug("Selling out %s" % (security))
     else:
@@ -669,8 +670,14 @@ def order_target_value_(security, value):
     order = order_target_value(security, value)
     # 模拟式盘情况下，订单非空
     if g.real_market_simulate and order != None:
+        tradedatetime = context.current_dt
+        posInPercent = value/context.portfolio.total_value
+        curr_data = get_current_data()
+        secname = curr_data[order.security].name
+        # mail to inform clients
+        mail_to_clients(order.security, secname, posInPercent, order.price, tradedatetime, '小市值策略改进版')
         # inform auto trader to do the trade
-        autotrader_stock_trade(order.security, value, order.price, order.order_id)
+        autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
     return order
 
 
@@ -893,7 +900,7 @@ def adjust_position(context, buy_stocks):
         if stock not in buy_stocks:
             log.info("stock [%s] in position is not buyable" %(stock))
             position = context.portfolio.positions[stock]
-            close_position(position)
+            close_position(context, position)
         else:
             log.info("stock [%s] is already in position" %(stock))
     
@@ -901,11 +908,11 @@ def adjust_position(context, buy_stocks):
     # 此处只根据可用金额平均分配购买，不能保证每个仓位平均分配
     position_count = len(context.portfolio.positions)
     if g.buy_stock_count > position_count:
-        value = context.portfolio.cash / (g.buy_stock_count - position_count)
+        value = context.portfolio.available_cash / (g.buy_stock_count - position_count)
 
         for stock in buy_stocks:
             if context.portfolio.positions[stock].total_amount == 0:
-                if open_position(stock, value):
+                if open_position(context, stock, value):
                     if len(context.portfolio.positions) == g.buy_stock_count:
                         break
 

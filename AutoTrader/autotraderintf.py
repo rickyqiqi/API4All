@@ -10,11 +10,8 @@ import urllib2
 from kuanke.user_space_api import *
 
 # autotraderintf.py
-# autotrader股票记录交易
-# security: 股票代码
-# value: 股票仓位总值
-# price: 平均成交价格, 已经成交的股票的平均成交价格(一个订单可能分多次成交)
-# order_id: 订单ID
+# autotrader在线状态
+# status: 在线状态
 # 返回值：无
 def autotrader_online_status(status):
     msg_data = {}
@@ -58,11 +55,12 @@ def autotrader_online_status(status):
 # autotraderintf.py
 # autotrader股票记录交易
 # security: 股票代码
+# secname: 股票名称
 # value: 股票仓位总值
 # price: 平均成交价格, 已经成交的股票的平均成交价格(一个订单可能分多次成交)
 # order_id: 订单ID
 # 返回值：无
-def autotrader_stock_trade(security, value, price, orderid):
+def autotrader_stock_trade(security, secname, value, price, tradedatetime, orderid):
     msg_data = {}
 
     accountpasswords = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
@@ -76,8 +74,9 @@ def autotrader_stock_trade(security, value, price, orderid):
     m1.update(plainpasswd)
     msg_data["password"] = m1.hexdigest()
     msg_data["marketCode"] = 'cn'
-    msg_data["txnTime"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    msg_data["txnTime"] = tradedatetime.strftime("%Y-%m-%d %H:%M:%S")
     msg_data["security"] = security
+    msg_data["secname"] = secname
     msg_data["value"] = value
     msg_data["price"] = price
     msg_data["orderId"] = orderid

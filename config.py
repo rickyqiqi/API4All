@@ -24,7 +24,7 @@ def get_candidates():
 
         if 'indexStock2Select' in content:
             indexStock2Select = content["indexStock2Select"]
-        if 'indexStock2Select' in content:
+        if 'candidates' in content:
             candidates = content["candidates"]
         if 'indexpool' in content:
             indexpool = content["indexpool"]
