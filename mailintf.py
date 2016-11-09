@@ -47,18 +47,23 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
         return
 
     mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime.strftime("%Y-%m-%d %H:%M:%S"), secname, security, value*100, price)
-    message = MIMEText(mail_msg, 'html', 'utf-8')
-    message['From'] = Header("量化交易策略", 'utf-8')
-    message['To'] =  Header("用户", 'utf-8')
 
-    subject = policyname + '买卖信号'
-    message['Subject'] = Header(subject, 'utf-8')
+    # 按收件人一封封地发邮件，以避免被视为垃圾邮件
+    for item in receivers:
+        message = MIMEText(mail_msg, 'html', 'utf-8')
+        message['From'] = "<%s>" %(sender)
+        subject = policyname + '买卖信号'
+        message['Subject'] = Header(subject, 'utf-8')
+        message['To'] = "<%s>" %(item)
+        log.info("发送邮件至：%s", item)
 
-    try:
-        smtpObj = smtplib.SMTP() 
-        smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
-        smtpObj.login(mail_user,mail_pass)  
-        smtpObj.sendmail(sender, receivers, message.as_string())
-        log.info("邮件发送成功")
-    except smtplib.SMTPException:
-        log.error("无法发送邮件")
+        try:
+            smtpObj = smtplib.SMTP()
+            #smtpObj.set_debuglevel(1)
+            smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
+            smtpObj.login(mail_user,mail_pass)
+            smtpObj.sendmail(sender, item, message.as_string())
+            smtpObj.quit()
+            log.info("邮件发送成功")
+        except smtplib.SMTPException:
+            log.error("无法发送邮件")
