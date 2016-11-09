@@ -24,12 +24,16 @@
 '''
 
 import tradestat
-from blacklist import *
 from config import *
 from autotraderintf import *
 from mailintf import *
 
 def before_trading_start(context):
+    # 检查变量是否在文件中更新
+    if get_variables_updated(g.addstring):
+        # 打印策略参数
+        log_param()
+
     log.info("---------------------------------------------")
     #log.info("==> before trading start @ %s", str(context.current_dt))
 
@@ -169,6 +173,8 @@ def set_param():
     g.filter_gem = True
     # 配置是否过滤黑名单股票，回测建议关闭，模拟运行时开启
     g.filter_blacklist = True
+    if g.filter_blacklist:
+        g.blacklist = []
 
     # 是否对股票评分
     g.is_rank_stock = True
@@ -250,7 +256,16 @@ def set_param():
     # 配置是否开启autotrader通知
     g.is_autotrader_inform_enabled = True
 
+    # 备选股票池，空表示所有股票备选
+    g.stock_candidates = []
+    # 是否使用指数池选股配置
+    g.index_stock_2_select = False
+    if g.index_stock_2_select:
+        # 指数池，默认沪深300指数
+        g.index_pool = ["000300.XSHG", "000905.XSHG"]
+
 def log_param():
+    log.info("---------------------------------------------")
     log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
@@ -302,6 +317,11 @@ def log_param():
 
     log.info("是否开启邮件通知: %s" %(g.is_mail_inform_enabled))
     log.info("是否开启autotrader通知: %s" %(g.is_autotrader_inform_enabled))
+
+    log.info("备选股票池: %s" %(str(g.stock_candidates)))
+    log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
+    if g.index_stock_2_select:
+        log.info("指数池: %s" %(str(g.index_pool)))
 
 # 重置当日参数，仅针对需要当日需要重置的参数
 def reset_day_param():
@@ -355,11 +375,6 @@ def stop_loss_by_portfolio_loss_rate(context):
 
 # 按分钟回测
 def handle_data(context, data):
-    # 检查变量是否在文件中更新
-    if get_variables_updated(g.addstring):
-        # 打印策略参数
-        log_param()
-
     if g.real_market_simulate and g.is_autotrader_inform_enabled:
         # 检查服务器在线状态
         autotrader_online_status(0)
@@ -794,13 +809,21 @@ def filter_new_stock(stock_list):
 # 选取指定数目的小市值股票，再进行过滤，最终挑选指定可买数目的股票
 def pick_stocks(context, data):
     # 获取备选股票
-    candidates = get_candidates()
+    # 是否使用指数池选股配置
+    if g.index_stock_2_select:
+        # 指数池
+        for index in g.index_pool:
+            g.stock_candidates += get_index_stocks(index)
+    else:
+        # 备选股票池，空表示所有股票备选
+        if len(g.stock_candidates) == 0:
+            g.stock_candidates = list(get_all_securities(['stock']).index)
 
     q = None
     if g.pick_by_pe:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
+                valuation.code.in_(g.stock_candidates),
                 indicator.eps > g.min_eps,
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
@@ -811,7 +834,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
+                valuation.code.in_(g.stock_candidates),
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
             ).order_by(
@@ -822,7 +845,7 @@ def pick_stocks(context, data):
     else:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
+                valuation.code.in_(g.stock_candidates),
                 indicator.eps > g.min_eps
             ).order_by(
                 valuation.market_cap.asc()
@@ -831,7 +854,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).order_by(
-                valuation.code.in_(candidates),
+                valuation.code.in_(g.stock_candidates),
                 valuation.market_cap.asc()
             ).limit(
                 g.pick_stock_count

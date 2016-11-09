@@ -15,9 +15,9 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
     receivers = []  # 接收邮件，可设置为你的QQ邮箱或者其他邮箱
 
     if g.real_market_simulate:
-        mailinfofile = 'mailreal.conf'
+        mailinfofile = 'config/mailreal.conf'
     else:
-        mailinfofile = 'mailloop.conf'
+        mailinfofile = 'config/mailloop.conf'
 
     try:
         jsoncontent = read_file(mailinfofile)

@@ -4,54 +4,13 @@ import types
 import json
 from kuanke.user_space_api import *
 
-# config.py
-# 获取备选股票
-def get_candidates():
-    # 是否使用指数池选股配置
-    indexStock2Select = False
-    # 备选股票池，空表示所有股票备选
-    candidates = []
-    # 指数池，默认沪深300指数
-    indexpool = ["000300.XSHG", "000905.XSHG"]
-    # 配置文件名称
-    if g.real_market_simulate:
-        configfilename = 'realmarket.conf'
-    else:
-        configfilename = 'loopback.conf'
-
-    try:
-        jsoncontent = read_file(configfilename)
-        content = json.loads(jsoncontent)
-
-        if 'indexStock2Select' in content:
-            indexStock2Select = content["indexStock2Select"]
-        if 'candidates' in content:
-            candidates = content["candidates"]
-        if 'indexpool' in content:
-            indexpool = content["indexpool"]
-    except:
-        log.error("配置文件%s读取错误" %(configfilename))
-
-    log.info("是否使用指数池选股配置: %s" %(indexStock2Select))
-    log.info("备选股票池: %s" %(str(candidates)))
-    log.info("指数池: %s" %(str(indexpool)))
-
-    if indexStock2Select:
-        for index in indexpool:
-            candidates += get_index_stocks(index)
-    else:
-        if len(candidates) == 0:
-            candidates = list(get_all_securities(['stock']).index)
-
-    return candidates
-
 # 获取配置值
 def get_variables_updated(addstring):
     # 配置值文件
     if g.real_market_simulate:
-        configfilename = 'varreal%s.conf' %(addstring)
+        configfilename = 'config/varreal%s.conf' %(addstring)
     else:
-        configfilename = 'varloop%s.conf' %(addstring)
+        configfilename = 'config/varloop%s.conf' %(addstring)
 
     try:
         jsoncontent = read_file(configfilename)
@@ -72,6 +31,14 @@ def get_variables_updated(addstring):
                     g.is_mail_inform_enabled = content["g.is_mail_inform_enabled"]
                 if 'g.is_autotrader_inform_enabled' in content and type(content["g.is_autotrader_inform_enabled"]) == types.BooleanType:
                     g.is_autotrader_inform_enabled = content["g.is_autotrader_inform_enabled"]
+                if 'g.stock_candidates' in content and type(content["g.stock_candidates"]) == types.ListType:
+                    g.stock_candidates = content["g.stock_candidates"]
+                if 'g.index_stock_2_select' in content and type(content["g.index_stock_2_select"]) == types.BooleanType:
+                    g.index_stock_2_select = content["g.index_stock_2_select"]
+                if 'g.index_pool' in content and type(content["g.index_pool"]) == types.ListType:
+                    g.index_pool = content["g.index_pool"]
+                if 'g.blacklist' in content and type(content["g.blacklist"]) == types.ListType:
+                    g.blacklist = content["g.blacklist"]
 
                 g.version = version
                 return True
@@ -79,3 +46,16 @@ def get_variables_updated(addstring):
         log.error("配置文件%s读取错误" %(configfilename))
 
     return False
+
+# 配置股票黑名单
+# 列出当且极不适宜购买的股票
+# 注：1. 黑名单有时效性，回测的时候最好不使用，模拟交易建议使用
+#     2. 用一模块或者大数据分析收集这类股票，定时更新
+def get_blacklist(context):
+    list_In_Effective = []
+    # 根据当天日期取得当日有效黑名单列表
+    for list in g.blacklist:
+        if context.current_dt >= datetime.datetime.strptime(list['start_date'],'%Y-%m-%d') and context.current_dt < datetime.datetime.strptime(list['end_date'],'%Y-%m-%d'):
+            list_In_Effective += list['stock_list']
+            
+    return list_In_Effective
