@@ -39,6 +39,8 @@ def get_variables_updated(addstring):
                     g.index_pool = content["g.index_pool"]
                 if 'g.blacklist' in content and type(content["g.blacklist"]) == types.ListType:
                     g.blacklist = content["g.blacklist"]
+                if 'g.indebug'  in content and type(content["g.indebug"]) == types.BooleanType:
+                    g.indebug = content["g.indebug"]
 
                 g.version = version
                 return True

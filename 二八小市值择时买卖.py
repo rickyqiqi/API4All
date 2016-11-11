@@ -57,7 +57,7 @@ def after_trading_end(context):
     g.trade_stat.report(context)
 
     # 模拟实盘情况下执行
-    if g.real_market_simulate and g.is_autotrader_inform_enabled:
+    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
         # 删除当天未完成的离线交易记录
         rm_all_records_offline()
 
@@ -88,6 +88,9 @@ def initialize(context):
 
     # additional string in variable configuration file name
     g.addstring = "7stocks"
+    
+    # 是否在调试模式下
+    g.indebug = False
 
     # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
     g.real_market_simulate = False
@@ -269,6 +272,7 @@ def set_param():
 
 def log_param():
     log.info("---------------------------------------------")
+    log.info("是否是调试模式: %s" %(g.indebug))
     log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
@@ -378,7 +382,7 @@ def stop_loss_by_portfolio_loss_rate(context):
 
 # 按分钟回测
 def handle_data(context, data):
-    if g.real_market_simulate and g.is_autotrader_inform_enabled:
+    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
         # 检查服务器在线状态
         autotrader_online_status(0)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
@@ -707,7 +711,7 @@ def order_target_value_(context, security, value):
     # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
     order = order_target_value(security, value)
     # 模拟式盘情况下，订单非空
-    if g.real_market_simulate and order != None:
+    if (g.real_market_simulate or g.indebug) and order != None:
         tradedatetime = context.current_dt
         posInPercent = value/context.portfolio.total_value
         curr_data = get_current_data()
