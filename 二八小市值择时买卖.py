@@ -71,7 +71,10 @@ def after_trading_end(context):
 
 def initialize(context):
     log.info("==> initialize @ %s", str(context.current_dt))
-    
+
+    # install opener
+    urllib2.install_opener(urllib2.build_opener(HTTPSHandlerV3()))
+
     # 设置手续费率
     set_commission(PerTrade(buy_cost=0.0003, sell_cost=0.0013, min_cost=5))
     # 设置基准指数：沪深300指数 '000300.XSHG'

@@ -5,11 +5,30 @@ import time
 import hashlib
 import random
 import json
-import urllib
-import urllib2
+import httplib, ssl, urllib, urllib2, socket
 from kuanke.user_space_api import *
 
 # autotraderintf.py
+# HTTPS SSL version3 connection process class
+class HTTPSConnectionV3(httplib.HTTPSConnection):
+    def __init__(self, *args, **kwargs):
+        httplib.HTTPSConnection.__init__(self, *args, **kwargs)
+
+    def connect(self):
+        sock = socket.create_connection((self.host, self.port), self.timeout)
+        if self._tunnel_host:
+            self.sock = sock
+            self._tunnel()
+        try:
+            self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_SSLv3)
+        except ssl.SSLError, e:
+            log.info("Trying SSLv3.")
+            self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_SSLv23)
+
+class HTTPSHandlerV3(urllib2.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(HTTPSConnectionV3, req)
+
 # autotrader在线状态
 # status: 在线状态
 # 返回值：无
@@ -23,7 +42,7 @@ def autotrader_online_status(status):
     json_data = json.dumps(msg_data)
     #log.info("Request: %s" %(json_data))
 
-    requrl = 'http://139.196.50.19/autotrader/onlinestatus'
+    requrl = 'https://139.196.50.19/autotrader/onlinestatus'
 
     txncode = 1
     try:
@@ -97,7 +116,7 @@ def do_record_offline():
         #log.info("记录类型: %s， 记录内容：%s" %(record_offline[0], record_offline[1]))
         # 重发离线交易记录
         if record_offline[0] == "stocktrade":
-            requrl = 'http://139.196.50.19/autotrader/stocktrade'
+            requrl = 'https://139.196.50.19/autotrader/stocktrade'
             #log.info("URL: %s" %(requrl))
 
             msg_data = json.loads(record_offline[1])
