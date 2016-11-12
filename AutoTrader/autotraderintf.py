@@ -63,6 +63,7 @@ def autotrader_online_status(status):
             currenttime = int(time.time())
             responsetime = json_decode['timestamp']
             if abs(currenttime-responsetime) > 10:
+                txncode = 2
                 # response with time stamp error
                 log.error('Autotrader服务器响应时间戳(%d)超时' %responsetime)
             else:
@@ -70,6 +71,9 @@ def autotrader_online_status(status):
                 #log.info("Autotrader服务器在线状态响应值：%d" %(txncode))
     except:
         log.error('Autotrader服务器通信失败')
+        txncode = -1
+
+    return txncode
 
 # autotraderintf.py
 # autotrader股票记录交易
@@ -105,7 +109,7 @@ def autotrader_stock_trade(security, secname, value, price, tradedatetime, order
     # record offline json data
     add_record_offline("stocktrade", json_data)
     # do record offline
-    do_record_offline()
+    return do_record_offline()
 
 # autotrader离线股票记录交易
 # 返回值：无
@@ -153,6 +157,7 @@ def do_record_offline():
                     currenttime = int(time.time())
                     responsetime = json_decode['timestamp']
                     if abs(currenttime-responsetime) > 10:
+                        txncode = 2
                         # response with time stamp error
                         log.error('Autotrader服务器响应时间戳(%d)超时' %responsetime)
                     else:
@@ -160,14 +165,20 @@ def do_record_offline():
                         log.info("Autotrader服务器股票交易响应值：%d" %(txncode))
             except:
                 log.error('Autotrader服务器通信失败')
+                txncode = -1
+                
             # delete the offline json data if response OK
             if txncode == 0:
                 # 删除这条离线记录
                 rm_1st_record_offline()
+
+            return txncode
         else:
             # 未知类型交易记录，直接删除
             log.error('删除未知记录类型: %s, 记录内容：%s' %(record_offline[0], record_offline[1]))
             rm_1st_record_offline()
+
+    return 0
 
 # 增加离线记录
 # recordtype: 记录类型

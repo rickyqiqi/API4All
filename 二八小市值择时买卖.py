@@ -91,6 +91,9 @@ def initialize(context):
     
     # 是否在调试模式下
     g.indebug = False
+    
+    # 在线状态响应码
+    g.online_response_code = 0
 
     # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
     g.real_market_simulate = False
@@ -383,10 +386,18 @@ def stop_loss_by_portfolio_loss_rate(context):
 # 按分钟回测
 def handle_data(context, data):
     if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
-        # 检查服务器在线状态
-        autotrader_online_status(0)
+        # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
+        if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
+            # 通信状态变化，发邮件通知
+            rspcode = autotrader_online_status(0)
+            if rspcode != g.online_response_code:
+                g.online_response_code = rspcode
+                mail_to_report(rspcode)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
-        do_record_offline()
+        rspcode = do_record_offline()
+        if rspcode != g.online_response_code:
+            g.online_response_code = rspcode
+            mail_to_report(rspcode)
 
     # 是否根据账户总金额下跌率止损
     if g.is_stop_loss_by_portfolio_loss_rate:
@@ -418,8 +429,12 @@ def do_handle_data(context, data):
     minute = context.current_dt.minute
 
     # 回看指数前20天的涨幅
-    gr_index2 = get_growth_rate(g.index2)
-    gr_index8 = get_growth_rate(g.index8)
+    gr_index2 = 0
+    if context.current_dt.date() > datetime.datetime(2005, 1, 31).date():
+        gr_index2 = get_growth_rate(g.index2)
+    gr_index8 = 0
+    if context.current_dt.date() > datetime.datetime(2007, 1, 21).date():
+        gr_index8 = get_growth_rate(g.index8)
     
     record(index2=gr_index2, index8=gr_index8)
 
@@ -721,7 +736,10 @@ def order_target_value_(context, security, value):
             mail_to_clients(order.security, secname, posInPercent, order.price, tradedatetime, '小市值策略改进版')
         if g.is_autotrader_inform_enabled:
             # inform auto trader to do the trade
-            autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+            rspcode = autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+            if rspcode != g.online_response_code:
+                g.online_response_code = rspcode
+                mail_to_report(rspcode)
     return order
 
 
@@ -816,21 +834,24 @@ def filter_new_stock(stock_list):
 # 选取指定数目的小市值股票，再进行过滤，最终挑选指定可买数目的股票
 def pick_stocks(context, data):
     # 获取备选股票
+    candidates = []
     # 是否使用指数池选股配置
     if g.index_stock_2_select:
         # 指数池
         for index in g.index_pool:
-            g.stock_candidates += get_index_stocks(index)
+            candidates += get_index_stocks(index)
     else:
         # 备选股票池，空表示所有股票备选
         if len(g.stock_candidates) == 0:
-            g.stock_candidates = list(get_all_securities(['stock']).index)
+            candidates = list(get_all_securities(['stock']).index)
+        else:
+            candidates = g.stock_candidates
 
     q = None
     if g.pick_by_pe:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
-                valuation.code.in_(g.stock_candidates),
+                valuation.code.in_(candidates),
                 indicator.eps > g.min_eps,
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
@@ -841,7 +862,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).filter(
-                valuation.code.in_(g.stock_candidates),
+                valuation.code.in_(candidates),
                 valuation.pe_ratio > g.min_pe,
                 valuation.pe_ratio < g.max_pe
             ).order_by(
@@ -852,7 +873,7 @@ def pick_stocks(context, data):
     else:
         if g.pick_by_eps:
             q = query(valuation.code).filter(
-                valuation.code.in_(g.stock_candidates),
+                valuation.code.in_(candidates),
                 indicator.eps > g.min_eps
             ).order_by(
                 valuation.market_cap.asc()
@@ -861,7 +882,7 @@ def pick_stocks(context, data):
             )
         else:
             q = query(valuation.code).order_by(
-                valuation.code.in_(g.stock_candidates),
+                valuation.code.in_(candidates),
                 valuation.market_cap.asc()
             ).limit(
                 g.pick_stock_count
