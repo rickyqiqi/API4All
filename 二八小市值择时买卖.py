@@ -433,7 +433,7 @@ def do_handle_data(context, data):
     if context.current_dt.date() > datetime.datetime(2005, 1, 31).date():
         gr_index2 = get_growth_rate(g.index2)
     gr_index8 = 0
-    if context.current_dt.date() > datetime.datetime(2007, 1, 21).date():
+    if context.current_dt.date() > datetime.datetime(2007, 1, 26).date():
         gr_index8 = get_growth_rate(g.index8)
     
     record(index2=gr_index2, index8=gr_index8)
