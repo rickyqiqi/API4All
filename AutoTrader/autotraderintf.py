@@ -37,7 +37,7 @@ def autotrader_online_status(status):
 
     msg_data["timestamp"] = int(time.time())
     msg_data["rand"] = random.randrange(-2147483647, 2147483647)
-    msg_data["status"] = 0
+    msg_data["status"] = status
 
     json_data = json.dumps(msg_data)
     #log.info("Request: %s" %(json_data))
@@ -47,7 +47,7 @@ def autotrader_online_status(status):
     txncode = 1
     try:
         req = urllib2.Request(url = requrl, data = json_data)
-        res_data = urllib2.urlopen(req)
+        res_data = urllib2.urlopen(req, timeout=5)
         response = res_data.read()
         #log.info("Response: %s" %(response))
 
@@ -141,7 +141,7 @@ def do_record_offline():
             txncode = 1
             try:
                 req = urllib2.Request(url = requrl, data = json_data)
-                res_data = urllib2.urlopen(req)
+                res_data = urllib2.urlopen(req, timeout=5)
                 response = res_data.read()
                 #log.info("Response: %s" %(response))
 
