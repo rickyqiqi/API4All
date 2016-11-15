@@ -394,10 +394,7 @@ def handle_data(context, data):
                 g.online_response_code = rspcode
                 mail_to_report(rspcode)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
-        rspcode = do_record_offline()
-        if rspcode != g.online_response_code:
-            g.online_response_code = rspcode
-            mail_to_report(rspcode)
+        do_record_offline()
 
     # 是否根据账户总金额下跌率止损
     if g.is_stop_loss_by_portfolio_loss_rate:
