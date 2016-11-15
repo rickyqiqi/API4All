@@ -108,8 +108,6 @@ def autotrader_stock_trade(security, secname, value, price, tradedatetime, order
 
     # record offline json data
     add_record_offline("stocktrade", json_data)
-    # do record offline
-    return do_record_offline()
 
 # autotrader离线股票记录交易
 # 返回值：无
