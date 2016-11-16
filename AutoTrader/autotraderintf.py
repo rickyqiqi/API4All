@@ -47,7 +47,9 @@ def autotrader_online_status(status):
     txncode = 1
     try:
         req = urllib2.Request(url = requrl, data = json_data)
-        res_data = urllib2.urlopen(req, timeout=5)
+        # 由于ssl证书为自有证书，因此这里不验证证书内容
+        gcontext = ssl._create_unverified_context()
+        res_data = urllib2.urlopen(req, context=gcontext, timeout=5)
         response = res_data.read()
         #log.info("Response: %s" %(response))
 
@@ -139,7 +141,9 @@ def do_record_offline():
             txncode = 1
             try:
                 req = urllib2.Request(url = requrl, data = json_data)
-                res_data = urllib2.urlopen(req, timeout=5)
+                # 由于ssl证书为自有证书，因此这里不验证证书内容
+                gcontext = ssl._create_unverified_context()
+                res_data = urllib2.urlopen(req, context=gcontext, timeout=5)
                 response = res_data.read()
                 #log.info("Response: %s" %(response))
 
