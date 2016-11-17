@@ -42,7 +42,7 @@ def autotrader_online_status(status):
     json_data = json.dumps(msg_data)
     #log.info("Request: %s" %(json_data))
 
-    requrl = 'https://139.196.50.19/autotrader/onlinestatus'
+    requrl = 'https://139.196.50.19:60443/autotrader/onlinestatus'
 
     txncode = 1
     try:
@@ -120,7 +120,7 @@ def do_record_offline():
         #log.info("记录类型: %s， 记录内容：%s" %(record_offline[0], record_offline[1]))
         # 重发离线交易记录
         if record_offline[0] == "stocktrade":
-            requrl = 'https://139.196.50.19/autotrader/stocktrade'
+            requrl = 'https://139.196.50.19:60443/autotrader/stocktrade'
             #log.info("URL: %s" %(requrl))
 
             msg_data = json.loads(record_offline[1])
