@@ -7,8 +7,13 @@ import random
 import json
 from flask import Flask
 from flask import request
+import logging
+import logging.config
 
 app = Flask(__name__)
+
+logging.config.fileConfig("/var/www/autotrader/logger.conf")
+logger = logging.getLogger("main")
 
 @app.route('/autotrader/onlinestatus', methods=['POST'])
 def onlinestatus():
@@ -33,10 +38,10 @@ def onlinestatus():
             if abs(currenttime-requesttime) > 10:
                 # response with time stamp error
                 response_data["txnCode"] = 2
-                app.logger.error('Request time stamp %d out of range' %requesttime)
+                logger.error('Request time stamp %d out of range' %requesttime)
             else:
                 if requesttime != currenttime:
-                    app.logger.error('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
+                    logger.warning('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
 
                 # response with success
                 response_data["txnCode"] = 0
@@ -90,10 +95,10 @@ def stocktrade():
             if abs(currenttime-requesttime) > 10:
                 # response with time stamp error
                 response_data["txnCode"] = 2
-                app.logger.error('Request time stamp %d out of range' %requesttime)
+                logger.error('Request time stamp %d out of range' %requesttime)
             else:
                 if requesttime != currenttime:
-                    app.logger.error('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
+                    logger.warning('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
 
                 accountpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
                 # check if the account NO. is valid
@@ -105,7 +110,7 @@ def stocktrade():
                     if json_decode["password"] == m2.hexdigest():
                         if json_decode["marketCode"] == "cn":
                             ret = True
-                            app.logger.debug("To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
+                            logger.debug("To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
                                   %(json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
                             if ret:
                                 # response with success
@@ -113,27 +118,27 @@ def stocktrade():
                             else:
                                 # response with parameters error
                                 response_data["txnCode"] = 10
-                                app.logger.error('Stock account process error')
+                                logger.error('Stock account process error')
                         else:
                             # response with parameters error
                             response_data["txnCode"] = 1
-                            app.logger.error('Market code error')
+                            logger.error('Market code error')
                     else:
                         # response with password error
                         response_data["txnCode"] = 7
-                        app.logger.error('Password error')
+                        logger.error('Password error')
                 else:
                     # response with account No invalid
                     response_data["txnCode"] = 6
-                    app.logger.error('Invalid account NO.')
+                    logger.error('Invalid account NO.')
         else:
             # response with parameters error
             response_data["txnCode"] = 1
-            app.logger.error('Item or item type error in json string')
+            logger.error('Item or item type error in json string')
     else :
         # response with parameters error
         response_data["txnCode"] = 1
-        app.logger.error('Json string error')
+        logger.error('Json string error')
 
     response_data["timestamp"] = int(time.time())
     response_data["rand"] = random.randrange(-2147483647, 2147483647)
