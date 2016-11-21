@@ -14,6 +14,7 @@ app = Flask(__name__)
 
 logging.config.fileConfig("/var/www/autotrader/logger.conf")
 logger = logging.getLogger("main")
+telegramlogger = logging.getLogger("telegram")
 
 @app.route('/autotrader/onlinestatus', methods=['POST'])
 def onlinestatus():
@@ -22,6 +23,7 @@ def onlinestatus():
     # request json string is in keys
     keys = request.form.keys()
 
+    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + ': ' + str(keys))
     # check if there's only 1 json string key
     if len(keys) == 1:
         # get the json request string
@@ -54,7 +56,9 @@ def onlinestatus():
 
     response_data["timestamp"] = int(time.time())
     response_data["rand"] = random.randrange(-2147483647, 2147483647)
-    return json.dumps(response_data)
+    json_response = json.dumps(response_data)
+    telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
+    return json_response
 
 @app.route('/autotrader/stocktrade', methods=['POST'])
 def stocktrade():
@@ -63,6 +67,7 @@ def stocktrade():
     # request json string is in keys
     keys = request.form.keys()
 
+    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + ': ' + str(keys))
     # check if there's only 1 json string key
     if len(keys) == 1:
         # get the json request string
@@ -142,7 +147,9 @@ def stocktrade():
 
     response_data["timestamp"] = int(time.time())
     response_data["rand"] = random.randrange(-2147483647, 2147483647)
-    return json.dumps(response_data)
+    json_response = json.dumps(response_data)
+    telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
+    return json_response
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
