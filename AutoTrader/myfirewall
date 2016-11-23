@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# iptables example configuration script
+#
+# Flush all current rules from iptables
+#
+iptables -F
+#
+# Set default policies for INPUT, FORWARD and OUTPUT chains
+#
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT DROP
+#
+# Set access for localhost
+#
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+#
+# Accept packets belonging to established and related connetcions
+#
+#iptables -A INPUT -p tcp -s 101.201.120.121 --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
+#iptables -A OUTPUT -p tcp -d 101.201.120.121 --sport 80 -m state --state ESTABLISHED -j ACCEPT
+iptables -A INPUT -p tcp --dport 60443 -m state --state NEW,ESTABLISHED -j ACCEPT
+iptables -A OUTPUT -p tcp --sport 60443 -m state --state ESTABLISHED -j ACCEPT
+#
+# Save settings
+#
+/sbin/service iptables save
+#
+# List rules
+#
+iptables -L -v
