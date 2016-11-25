@@ -23,7 +23,10 @@ def onlinestatus():
     # request json string is in keys
     keys = request.form.keys()
 
-    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + ': ' + str(keys))
+    query_str = ""
+    if request.query_string != "":
+        query_str = '/' + str(request.query_string)
+    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + query_str + ': ' + str(keys))
     # check if there's only 1 json string key
     if len(keys) == 1:
         # get the json request string
@@ -67,7 +70,10 @@ def stocktrade():
     # request json string is in keys
     keys = request.form.keys()
 
-    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + ': ' + str(keys))
+    query_str = ""
+    if request.query_string != "":
+        query_str = '/' + str(request.query_string)
+    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + query_str + ': ' + str(keys))
     # check if there's only 1 json string key
     if len(keys) == 1:
         # get the json request string
