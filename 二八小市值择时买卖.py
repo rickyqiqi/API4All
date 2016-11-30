@@ -274,7 +274,7 @@ def set_param():
         g.index_pool = ["000300.XSHG", "000905.XSHG"]
 
     # 出现二八分化时是否采纳大盘指数股票池
-    g.large_market_share_index_pool_used = False
+    g.large_market_share_index_pool_used = True
     if g.large_market_share_index_pool_used:
         # 大盘指数股票池
         g.large_market_share_index = '000016.XSHG'
