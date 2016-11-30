@@ -273,6 +273,14 @@ def set_param():
         # 指数池，默认沪深300指数
         g.index_pool = ["000300.XSHG", "000905.XSHG"]
 
+    # 出现二八分化时是否采纳大盘指数股票池
+    g.large_market_share_index_pool_used = False
+    if g.large_market_share_index_pool_used:
+        # 大盘指数股票池
+        g.large_market_share_index = '000016.XSHG'
+        # 二八分化判断参数
+        g.large_market_share_trend_judge_param = 0.065
+
 def log_param():
     log.info("---------------------------------------------")
     log.info("是否是调试模式: %s" %(g.indebug))
@@ -332,6 +340,11 @@ def log_param():
     log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
     if g.index_stock_2_select:
         log.info("指数池: %s" %(str(g.index_pool)))
+
+    log.info("出现二八分化时，是否采纳大盘指数股票池: %s" %(g.large_market_share_index_pool_used))
+    if g.large_market_share_index_pool_used:
+        log.info("大盘指数股票池: %s" %(g.large_market_share_index))
+        log.info("二八分化判断参数: %.03f" %(g.large_market_share_trend_judge_param))
 
 # 重置当日参数，仅针对需要当日需要重置的参数
 def reset_day_param():
@@ -654,10 +667,13 @@ def get_stop_profit_threshold(security, n = 3):
 
 # 获取股票n日以来涨幅，根据当前价计算
 # n 默认20日
-def get_growth_rate(security, n=20):
-    lc = get_close_price(security, n)
-    #c = data[security].close
-    c = get_close_price(security, 1, '1m')
+# endday 结束日（0为当前报价，1为前第1日，2为前第2日...）
+def get_growth_rate(security, n=20, endday=0):
+    lc = get_close_price(security, n+endday)
+    if endday == 0:
+        c = get_close_price(security, 1, '1m')
+    else:
+        c = get_close_price(security, endday)
     
     if not isnan(lc) and not isnan(c) and lc != 0:
         return (c - lc) / lc
@@ -843,7 +859,22 @@ def pick_stocks(context, data):
     else:
         # 备选股票池，空表示所有股票备选
         if len(g.stock_candidates) == 0:
-            candidates = list(get_all_securities(['stock']).index)
+            if g.large_market_share_index_pool_used:
+                # 判断是否出现二八分化
+                gr_index2_3d = get_growth_rate(g.index2, n=3, endday=2)
+                gr_index2_5d = get_growth_rate(g.index2, 5)
+                gr_index8_3d = get_growth_rate(g.index8, n=3, endday=2)
+                gr_index8_5d = get_growth_rate(g.index8, 5)
+                if (context.current_dt.date() > datetime.datetime(2007, 1, 26).date()) \
+                   and (gr_index2_5d > gr_index2_3d) and ((gr_index2_5d - gr_index2_3d) - (gr_index8_5d - gr_index8_3d) > g.large_market_share_trend_judge_param):
+                    candidates = get_index_stocks(g.large_market_share_index)
+                    log.info("大盘股指数（%s）远超小盘股指数（%s），大盘股指数作为股票池", g.index2, g.index8)
+                else:
+                    candidates = list(get_all_securities(['stock']).index)
+                    log.info("所有股票作为股票池")
+            else:
+                candidates = list(get_all_securities(['stock']).index)
+                log.info("所有股票作为股票池")
         else:
             candidates = g.stock_candidates
 

@@ -41,6 +41,12 @@ def get_variables_updated(addstring):
                     g.blacklist = content["g.blacklist"]
                 if 'g.indebug'  in content and type(content["g.indebug"]) == types.BooleanType:
                     g.indebug = content["g.indebug"]
+                if 'g.large_market_share_index_pool_used'  in content and type(content["g.large_market_share_index_pool_used"]) == types.BooleanType:
+                    g.large_market_share_index_pool_used = content["g.large_market_share_index_pool_used"]
+                if 'g.large_market_share_index' in content and type(content["g.large_market_share_index"]) == types.UnicodeType:
+                    g.large_market_share_index = content["g.large_market_share_index"]
+                if 'g.large_market_share_trend_judge_param' in content and type(content["g.large_market_share_trend_judge_param"]) == types.FloatType:
+                    g.large_market_share_trend_judge_param = content["g.large_market_share_trend_judge_param"]
 
                 g.version = version
                 return True
