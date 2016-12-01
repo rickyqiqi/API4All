@@ -55,12 +55,13 @@ def autotrader_online_status(status):
 
         # get the json request string
         json_decode = json.loads(response)
-        if 'timestamp' in json_decode \
-          and type(json_decode["timestamp"]) == types.IntType \
-          and 'rand' in json_decode \
-          and type(json_decode["rand"]) == types.IntType \
-          and 'txnCode' in json_decode \
-          and type(json_decode["txnCode"]) == types.IntType:
+        if not (json_decode.has_key('timestamp') and type(json_decode["timestamp"]) == types.IntType):
+            log.error('JSON key \"timestamp\" related error')
+        elif not (json_decode.has_key('rand') and type(json_decode["rand"]) == types.IntType):
+            log.error('JSON key \"rand\" related error')
+        elif not (json_decode.has_key('txnCode') and type(json_decode["txnCode"]) == types.IntType):
+            log.error('JSON key \"txnCode\" related error')
+        else:
             # if current time and request time stamp in range
             currenttime = int(time.time())
             responsetime = json_decode['timestamp']
@@ -149,12 +150,13 @@ def do_record_offline():
 
                 # get the json request string
                 json_decode = json.loads(response)
-                if 'timestamp' in json_decode \
-                  and type(json_decode["timestamp"]) == types.IntType \
-                  and 'rand' in json_decode \
-                  and type(json_decode["rand"]) == types.IntType \
-                  and 'txnCode' in json_decode \
-                  and type(json_decode["txnCode"]) == types.IntType:
+                if not (json_decode.has_key('timestamp') and type(json_decode["timestamp"]) == types.IntType):
+                    log.error('JSON key \"timestamp\" related error')
+                elif not (json_decode.has_key('rand') and type(json_decode["rand"]) == types.IntType):
+                    log.error('JSON key \"rand\" related error')
+                elif not (json_decode.has_key('txnCode') and type(json_decode["txnCode"]) == types.IntType):
+                    log.error('JSON key \"txnCode\" related error')
+                else:
                     # if current time and request time stamp in range
                     currenttime = int(time.time())
                     responsetime = json_decode['timestamp']
