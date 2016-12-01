@@ -18,8 +18,8 @@
         每日指定时间，计算沪深300指数和中证500指数当前的20日涨幅，如果2个指数涨幅都为负，
         则清仓，重置调仓计数，待下次调仓条件满足再操作
 
-版本：v2.0.6
-日期：2016.08.31
+版本：v2.0.7
+日期：2016.11.15
 作者：Morningstar
 '''
 
@@ -114,6 +114,9 @@ def initialize(context):
     # 关闭个股止盈止损
     # 关闭选股评分
     set_param()
+    
+    # 调仓日计数器，单位：日
+    g.day_count = 0
 
     # 缓存股票持仓后的最高价
     g.last_high = {}
@@ -142,6 +145,9 @@ def initialize(context):
         # 缓存当日个股250天内最大的3日涨幅，避免当日反复获取，每日盘后清空
         g.pct_change = {}
 
+    if g.is_market_stop_loss_by_28_index:
+        g.minute_count_28index_drop = 0
+
     # 调仓完成标志
     g.position_change_finished = False
     # 当日涨幅超出过设定调仓的二八指数20日增幅标志
@@ -153,8 +159,6 @@ def initialize(context):
 def set_param():
     # 调仓频率，单位：日
     g.period = 3
-    # 调仓日计数器，单位：日
-    g.day_count = 0
     # 配置调仓时间（24小时分钟制）
     g.adjust_position_hour = 14
     g.adjust_position_minute = 50
@@ -212,15 +216,15 @@ def set_param():
     #g.index8 = '399006.XSHE'  # 创业板指数
     
     # 判定调仓的二八指数20日增幅
-    #g.index_growth_rate_20 = 0.00
-    g.index_growth_rate_20 = 0.01
+    #g.index_growth_rate = 0.00
+    g.index_growth_rate = 0.01
 
     # 配置是否检查全天买入机会
     # 全天中有超过二八指数20日增幅的情况，但到达调仓时间点时又回撤回去了
     g.check_buy_in_chance_all_day = True
     if g.check_buy_in_chance_all_day:
         # 调仓时间点二八指数20日增幅允许为标准二八指数20日增幅的百分比
-        g.ajust_rate_4_index_growth_rate_20 = 0.85
+        g.ajust_rate_4_index_growth_rate = 0.85
 
     # 配置是否根据大盘历史价格止损
     # 大盘指数前160日内最高价超过最低价2倍，则清仓止损
@@ -241,6 +245,12 @@ def set_param():
     g.is_market_stop_loss_by_3_black_crows = False
     if g.is_market_stop_loss_by_3_black_crows:
         g.dst_drop_minute_count = 60
+
+    # 是否根据28指数值实时进行止损
+    g.is_market_stop_loss_by_28_index = False
+    if g.is_market_stop_loss_by_28_index:
+        # 配置当日28指数连续为跌的分钟计数达到指定值则止损
+        g.dst_minute_count_28index_drop = 120
 
     # 配置是否个股止损
     g.is_stock_stop_loss = True
@@ -310,7 +320,7 @@ def log_param():
 
     log.info("二八指数之二: %s - %s" %(g.index2, get_security_info(g.index2).display_name))
     log.info("二八指数之八: %s - %s" %(g.index8, get_security_info(g.index8).display_name))
-    log.info("判定调仓的二八指数20日增幅: %.1f%%" %(g.index_growth_rate_20*100))
+    log.info("判定调仓的二八指数20日增幅: %.1f%%" %(g.index_growth_rate*100))
 
     log.info("是否开启大盘历史高低价格止损: %s" %(g.is_market_stop_loss_by_price))
     if g.is_market_stop_loss_by_price:
@@ -321,6 +331,10 @@ def log_param():
     log.info("是否开启大盘三黑鸦止损: %s" %(g.is_market_stop_loss_by_3_black_crows))
     if g.is_market_stop_loss_by_3_black_crows:
         log.info("三黑鸦止损开启需要当日大盘为跌的分钟计数达到: %d" %(g.dst_drop_minute_count))
+
+    log.info("是否根据28指数值实时进行止损: %s" %(g.is_market_stop_loss_by_28_index))
+    if g.is_market_stop_loss_by_28_index:
+        log.info("根据28指数止损需要当日28指数连续为跌的分钟计数达到: %d" %(g.dst_minute_count_28index_drop))        
 
     log.info("是否开启个股止损: %s" %(g.is_stock_stop_loss))
     if g.is_stock_stop_loss:
@@ -356,14 +370,17 @@ def reset_day_param():
         # 重置当日大盘价格止损状态
         g.is_day_stop_loss_by_price = False
 
-    if g.is_stock_stop_loss or g.is_stock_stop_profit:
-        # 清空当日个股250天内最大的3日涨幅的缓存
-        g.pct_change.clear()
-
     # 重置三黑鸦状态
     g.is_last_day_3_black_crows = False
     if g.is_market_stop_loss_by_3_black_crows:
         g.cur_drop_minute_count = 0
+
+    if g.is_market_stop_loss_by_28_index:
+        g.minute_count_28index_drop = 0
+
+    if g.is_stock_stop_loss or g.is_stock_stop_profit:
+        # 清空当日个股250天内最大的3日涨幅的缓存
+        g.pct_change.clear()
 
     # 复位调仓完成标志
     g.position_change_finished = False
@@ -422,6 +439,10 @@ def handle_data(context, data):
         if market_stop_loss_by_price(context, g.index_4_stop_loss_by_price):
             return
 
+    if g.is_market_stop_loss_by_28_index:
+        if market_stop_loss_by_28_index(context, g.dst_minute_count_28index_drop):
+            return
+
     if g.is_market_stop_loss_by_3_black_crows:
         if market_stop_loss_by_3_black_crows(context, g.index_4_stop_loss_by_3_black_crows, g.dst_drop_minute_count):
             return
@@ -452,20 +473,20 @@ def do_handle_data(context, data):
     # 是否设置了检查全天买入机会的选项
     if g.check_buy_in_chance_all_day:
         # 超过标准二八指数20日增幅则记录下来
-        if gr_index2 > g.index_growth_rate_20 or gr_index8 > g.index_growth_rate_20:
+        if gr_index2 > g.index_growth_rate or gr_index8 > g.index_growth_rate:
             g.index_growth_rate_over_uplimit = True
 
     # 是否当日调仓已经完成
     if not g.position_change_finished:
         # 是否是调仓时点及其之后的时点
-        # 每天下午14:50调仓
+        # 每天指定时间检查是否调仓并处理
         if hour == g.adjust_position_hour and minute >= g.adjust_position_minute:
             if minute == g.adjust_position_minute:
                 log.info("调仓日计数 [%d]" %(g.day_count))
                 log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
                 log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index8).display_name, gr_index8*100))
 
-            buy_in_condition = (gr_index2 > g.index_growth_rate_20) or (gr_index8 > g.index_growth_rate_20)
+            buy_in_condition = (gr_index2 > g.index_growth_rate) or (gr_index8 > g.index_growth_rate)
 
             # 是否设置了检查全天买入机会的选项
             if g.check_buy_in_chance_all_day:
@@ -473,8 +494,8 @@ def do_handle_data(context, data):
                 # 是否全天中有超过标准二八指数20日增幅
                 # 当前调仓时间点指数涨幅超过了标准二八指数20日增幅的一定调整比例
                 if context.portfolio.positions_value <= 0 and g.index_growth_rate_over_uplimit \
-                    and (gr_index2 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20 \
-                        or gr_index8 > g.index_growth_rate_20*g.ajust_rate_4_index_growth_rate_20):
+                    and (gr_index2 > g.index_growth_rate*g.ajust_rate_4_index_growth_rate \
+                        or gr_index8 > g.index_growth_rate*g.ajust_rate_4_index_growth_rate):
                     buy_in_condition = True
 
             if buy_in_condition:
@@ -497,11 +518,13 @@ def market_stop_loss_by_price(context, index):
 
     if not g.is_day_stop_loss_by_price:
         h = attribute_history(index, 160, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
-        low_price_160 = h.low.min()
-        high_price_160 = h.high.max()
-        if high_price_160 > 2 * g.ajust_rate_4_stock_stop_profit * low_price_160 and h['close'][-1]<h['close'][-4]*1 and  h['close'][-1]> h['close'][-100]:
+        low_price = h.low.min()
+        high_price = h.high.max()
+        if high_price > 2 * g.ajust_rate_4_stock_stop_profit * low_price \
+            and h['close'][-1] < h['close'][-4] \
+            and h['close'][-1] > h['close'][-100]:
             # 当日第一次输出日志
-            log.info("==> 大盘止损，%s指数前160日内最高价超过最低价2倍, 最高价: %f, 最低价: %f" %(get_security_info(index).display_name, high_price_160, low_price_160))
+            log.info("==> 大盘止损，%s指数前160日内最高价超过最低价2倍, 最高价: %f, 最低价: %f" %(get_security_info(index).display_name, high_price, low_price))
             g.is_day_stop_loss_by_price = True
 
     if g.is_day_stop_loss_by_price:
@@ -520,7 +543,7 @@ def market_stop_loss_by_3_black_crows(context, index, n):
 
         if g.cur_drop_minute_count >= n:
             if g.cur_drop_minute_count == n:
-                log.info("==> 当日%s为跌已超过%d分钟，执行三黑鸦止损" %(get_security_info(index).display_name, n))
+                log.info("==> 当日%s增幅 < 0 已超过%d分钟，执行三黑鸦止损" %(get_security_info(index).display_name, n))
 
             clear_position(context)
             g.day_count = 0
@@ -555,7 +578,7 @@ def is_3_black_crows(stock):
     if h_close[-4] > h_open[-4] \
         and (h_close[-1] < h_open[-1] and h_close[-2]< h_open[-2] and h_close[-3] < h_open[-3]):
         #and (h_close[-1] < h_close[-2] and h_close[-2] < h_close[-3]) \
-        #and h_close[-1] / h_close[-3] - 1 < -0.045:
+        #and h_close[-1] / h_close[-4] - 1 < -0.045:
         return True
     return False
     
@@ -576,6 +599,35 @@ def is_3_black_crows(stock, data):
                 return True
     return False
 '''
+
+def market_stop_loss_by_28_index(context, count):
+    # 回看指数前20天的涨幅
+    gr_index2 = get_growth_rate(g.index2)
+    gr_index8 = get_growth_rate(g.index8)
+
+    if gr_index2 <= g.index_growth_rate and gr_index8 <= g.index_growth_rate:
+        if (g.minute_count_28index_drop == 0):
+            log.info("当前二八指数的20日涨幅同时低于[%.2f%%], %s指数: [%.2f%%], %s指数: [%.2f%%]" \
+                %(g.index_growth_rate*100, get_security_info(g.index2).display_name, gr_index2*100, get_security_info(g.index8).display_name, gr_index8*100))
+
+            #log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index2).display_name, gr_index2*100))
+            #log.info("当前%s指数的20日涨幅 [%.2f%%]" %(get_security_info(g.index8).display_name, gr_index8*100))
+        g.minute_count_28index_drop += 1
+    else:
+        # 不连续状态归零
+        if g.minute_count_28index_drop < count:
+            g.minute_count_28index_drop = 0
+
+    if g.minute_count_28index_drop >= count:
+        if g.minute_count_28index_drop == count:
+            log.info("==> 当日%s指数和%s指数的20日增幅低于[%.2f%%]已超过%d分钟，执行28指数止损" \
+                %(get_security_info(g.index2).display_name, get_security_info(g.index8).display_name, g.index_growth_rate*100, count))
+
+        clear_position(context)
+        g.day_count = 0
+        return True
+        
+    return False
 
 # 个股止损
 def stock_stop_loss(context, data):
@@ -663,7 +715,7 @@ def get_stop_profit_threshold(security, n = 3):
     # 理论上maxr可能为负
     if (not isnan(maxr)) and maxr != 0:
         return abs(maxr)
-    return 0.30 # 默认配置止盈阈值最大涨幅为20%
+    return 0.30 # 默认配置止盈阈值最大涨幅为30%
 
 # 获取股票n日以来涨幅，根据当前价计算
 # n 默认20日
@@ -878,42 +930,22 @@ def pick_stocks(context, data):
         else:
             candidates = g.stock_candidates
 
-    q = None
+    q = query(valuation.code).filter(
+            valuation.code.in_(candidates)
+        )
     if g.pick_by_pe:
-        if g.pick_by_eps:
-            q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
-                indicator.eps > g.min_eps,
-                valuation.pe_ratio > g.min_pe,
-                valuation.pe_ratio < g.max_pe
-            ).order_by(
-                valuation.market_cap.asc()
-            ).limit(
-                g.pick_stock_count
+        q = q.filter(
+            valuation.pe_ratio > g.min_pe, 
+            valuation.pe_ratio < g.max_pe
             )
-        else:
-            q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
-                valuation.pe_ratio > g.min_pe,
-                valuation.pe_ratio < g.max_pe
-            ).order_by(
-                valuation.market_cap.asc()
-            ).limit(
-                g.pick_stock_count
+
+    if g.pick_by_eps:
+        q = q.filter(
+            indicator.eps > g.min_eps,
+            #valuation.turnover_ratio > 3
             )
-    else:
-        if g.pick_by_eps:
-            q = query(valuation.code).filter(
-                valuation.code.in_(candidates),
-                indicator.eps > g.min_eps
-            ).order_by(
-                valuation.market_cap.asc()
-            ).limit(
-                g.pick_stock_count
-            )
-        else:
-            q = query(valuation.code).order_by(
-                valuation.code.in_(candidates),
+
+    q = q.order_by(
                 valuation.market_cap.asc()
             ).limit(
                 g.pick_stock_count
@@ -934,7 +966,7 @@ def pick_stocks(context, data):
     stock_list = filter_limitdown_stock(context, stock_list)
 
     # 根据20日股票涨幅过滤效果不好，故注释
-    #stock_list = filter_by_growth_rate(stock_list, 15)
+    #stock_list = filter_by_growth_rate(stock_list, 20)
     
     if g.is_rank_stock:
         if len(stock_list) > g.rank_stock_count:
@@ -1024,6 +1056,20 @@ def adjust_position(context, buy_stocks):
 --------------------------------------------------------------------------------
 
 更新：
+
+2016.11.15
+
+v2.0.7
+增加根据28指数值实时止损，效果暂不理想，默认关闭
+感谢@零零发 的分享，完善根据大盘价格止损，改为根据160日高低价格进行条件止损
+优化日志，更易读
+感谢@ordo，优化选股代码
+调整默认参数，并非最优，最优我也不知道:-)
+注：
+1. 默认3日2股评分大盘价格及三黑鸦止损
+2. 持股数量一般会影响策略波动性，数量太少，策略波动较大，建议股票数目 >= 3，然后调整
+参数达到一个好的配置
+3. 三黑鸦会降低回测，同时收益也会降低
 
 2016.08.31
 
