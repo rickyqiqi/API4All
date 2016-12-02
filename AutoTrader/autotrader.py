@@ -3,6 +3,7 @@
 import sys
 import types
 import time
+import threading
 import hashlib
 import random
 import json
@@ -163,7 +164,8 @@ def stocktrade():
                             value = json_decode["value"]
                             price = json_decode["price"]
                             tradedatetime = json_decode["txnTime"]
-                            #mail_to_clients(security, secname, value, price, tradedatetime, '小市值策略改进版')
+                            mailer = threading.Thread(target=mail_to_clients, args=[security, secname, value, price, tradedatetime, '小市值策略改进版'])
+                            mailer.start()
 
                             if ret:
                                 # response with success
