@@ -237,6 +237,7 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
 
     mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime, secname, security, value*100, price)
 
+    failedlist = []
     # 按收件人一封封地发邮件，以避免被视为垃圾邮件
     for item in receivers:
         message = MIMEText(mail_msg, 'html', 'utf-8')
@@ -255,7 +256,28 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
             smtpObj.quit()
             logger.info("邮件发送成功")
         except smtplib.SMTPException:
+            failedlist.append(item)
             logger.error("无法发送邮件")
+
+    # 发送失败的收件人再次尝试重发邮件
+    for item in failedlist:
+        message = MIMEText(mail_msg, 'html', 'utf-8')
+        message['From'] = "<%s>" %(sender)
+        subject = policyname + '买卖信号'
+        message['Subject'] = Header(subject, 'utf-8')
+        message['To'] = "<%s>" %(item)
+        logger.info("发送邮件至：%s", item)
+
+        try:
+            smtpObj = smtplib.SMTP()
+            #smtpObj.set_debuglevel(1)
+            smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
+            smtpObj.login(mail_user,mail_pass)
+            smtpObj.sendmail(sender, item, message.as_string())
+            smtpObj.quit()
+            logger.info("邮件再次发送成功")
+        except smtplib.SMTPException:
+            logger.error("再次发送仍无法发送邮件")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
