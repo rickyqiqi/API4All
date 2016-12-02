@@ -1,5 +1,6 @@
 #coding=utf-8
 
+import sys
 import types
 import time
 import hashlib
@@ -14,6 +15,9 @@ import logging
 import logging.config
 
 app = Flask(__name__)
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 logging.config.fileConfig("/var/www/autotrader/logger.conf")
 logger = logging.getLogger("main")
@@ -159,7 +163,7 @@ def stocktrade():
                             value = json_decode["value"]
                             price = json_decode["price"]
                             tradedatetime = json_decode["txnTime"]
-                            mail_to_clients(security, secname, value, price, tradedatetime, '小市值策略改进版')
+                            #mail_to_clients(security, secname, value, price, tradedatetime, '小市值策略改进版')
 
                             if ret:
                                 # response with success
@@ -199,7 +203,7 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
     sender = ""
     receivers = []  # 接收邮件，可设置为你的QQ邮箱或者其他邮箱
 
-    mailinfofile = 'config/maillist.conf'
+    mailinfofile = '/var/www/autotrader/config/maillist.conf'
     try:
         fp = open(mailinfofile, 'r')
         jsoncontent = fp.read()
@@ -229,7 +233,7 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
         logger.error("邮件接受列表空")
         return
 
-    mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime.strftime("%Y-%m-%d %H:%M:%S"), secname, security, value*100, price)
+    mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime, secname, security, value*100, price)
 
     # 按收件人一封封地发邮件，以避免被视为垃圾邮件
     for item in receivers:
