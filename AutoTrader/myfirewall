@@ -17,6 +17,11 @@ iptables -P OUTPUT DROP
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 #
+# Accept to send smtp mail
+#
+iptables -A OUTPUT -p tcp --dport 25 -j ACCEPT
+iptables -A INPUT -p tcp --sport 25 -j ACCEPT
+#
 # Accept DNS port
 #
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT

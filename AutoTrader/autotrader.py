@@ -212,15 +212,15 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
         fp.close()
         content = json.loads(jsoncontent)
 
-        if 'smtphost' in content:
+        if content.has_key('smtphost'):
             mail_host = content["smtphost"]
-        if 'account' in content:
+        if content.has_key('account'):
             mail_user = content["account"]
-        if 'password' in content:
+        if content.has_key('password'):
             mail_pass = content["password"]
-        if 'sender' in content:
+        if content.has_key('sender'):
             sender = content["sender"]
-        if 'receivers' in content:
+        if content.has_key('receivers'):
             receivers = content["receivers"]
     except:
         logger.error("配置文件%s读取错误" %(mailinfofile))

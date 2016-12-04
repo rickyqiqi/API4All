@@ -271,7 +271,7 @@ def set_param():
         g.dst_portfolio_drop_minute_count = 60
 
     # 配置是否开启邮件通知
-    g.is_mail_inform_enabled = True
+    g.is_mail_inform_enabled = False
     # 配置是否开启autotrader通知
     g.is_autotrader_inform_enabled = True
 

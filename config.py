@@ -16,36 +16,36 @@ def get_variables_updated(addstring):
         jsoncontent = read_file(configfilename)
         content = json.loads(jsoncontent)
 
-        if 'version' in content and type(content["version"]) == types.FloatType:
+        if content.has_key('version') and type(content["version"]) == types.FloatType:
             version = content["version"]
             # 更新初始化函数里的赋值
             if version > g.version:
                 # 需更新的数值写在这
-                if 'g.is_rank_stock_score_plus_allowed' in content and type(content["g.is_rank_stock_score_plus_allowed"]) == types.BooleanType:
+                if content.has_key('g.is_rank_stock_score_plus_allowed') and type(content["g.is_rank_stock_score_plus_allowed"]) == types.BooleanType:
                     g.is_rank_stock_score_plus_allowed = content["g.is_rank_stock_score_plus_allowed"]
-                if 'g.buy_stock_count' in content and type(content["g.buy_stock_count"]) == types.IntType:
+                if content.has_key('g.buy_stock_count') and type(content["g.buy_stock_count"]) == types.IntType:
                     g.buy_stock_count = content["g.buy_stock_count"]
-                if 'g.is_stop_loss_by_portfolio_loss_rate' in content and type(content["g.is_stop_loss_by_portfolio_loss_rate"]) == types.BooleanType:
+                if content.has_key('g.is_stop_loss_by_portfolio_loss_rate') and type(content["g.is_stop_loss_by_portfolio_loss_rate"]) == types.BooleanType:
                     g.is_stop_loss_by_portfolio_loss_rate = content["g.is_stop_loss_by_portfolio_loss_rate"]
-                if 'g.is_mail_inform_enabled' in content and type(content["g.is_mail_inform_enabled"]) == types.BooleanType:
+                if content.has_key('g.is_mail_inform_enabled') and type(content["g.is_mail_inform_enabled"]) == types.BooleanType:
                     g.is_mail_inform_enabled = content["g.is_mail_inform_enabled"]
-                if 'g.is_autotrader_inform_enabled' in content and type(content["g.is_autotrader_inform_enabled"]) == types.BooleanType:
+                if content.has_key('g.is_autotrader_inform_enabled') and type(content["g.is_autotrader_inform_enabled"]) == types.BooleanType:
                     g.is_autotrader_inform_enabled = content["g.is_autotrader_inform_enabled"]
-                if 'g.stock_candidates' in content and type(content["g.stock_candidates"]) == types.ListType:
+                if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType:
                     g.stock_candidates = content["g.stock_candidates"]
-                if 'g.index_stock_2_select' in content and type(content["g.index_stock_2_select"]) == types.BooleanType:
+                if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType:
                     g.index_stock_2_select = content["g.index_stock_2_select"]
-                if 'g.index_pool' in content and type(content["g.index_pool"]) == types.ListType:
+                if content.has_key('g.index_pool') and type(content["g.index_pool"]) == types.ListType:
                     g.index_pool = content["g.index_pool"]
-                if 'g.blacklist' in content and type(content["g.blacklist"]) == types.ListType:
+                if content.has_key('g.blacklist') and type(content["g.blacklist"]) == types.ListType:
                     g.blacklist = content["g.blacklist"]
-                if 'g.indebug'  in content and type(content["g.indebug"]) == types.BooleanType:
+                if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType:
                     g.indebug = content["g.indebug"]
-                if 'g.large_market_share_index_pool_used'  in content and type(content["g.large_market_share_index_pool_used"]) == types.BooleanType:
+                if content.has_key('g.large_market_share_index_pool_used' ) and type(content["g.large_market_share_index_pool_used"]) == types.BooleanType:
                     g.large_market_share_index_pool_used = content["g.large_market_share_index_pool_used"]
-                if 'g.large_market_share_index' in content and type(content["g.large_market_share_index"]) == types.UnicodeType:
+                if content.has_key('g.large_market_share_index') and type(content["g.large_market_share_index"]) == types.UnicodeType:
                     g.large_market_share_index = content["g.large_market_share_index"]
-                if 'g.large_market_share_trend_judge_param' in content and type(content["g.large_market_share_trend_judge_param"]) == types.FloatType:
+                if content.has_key('g.large_market_share_trend_judge_param') and type(content["g.large_market_share_trend_judge_param"]) == types.FloatType:
                     g.large_market_share_trend_judge_param = content["g.large_market_share_trend_judge_param"]
 
                 g.version = version
