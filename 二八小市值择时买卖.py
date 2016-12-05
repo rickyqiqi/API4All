@@ -802,7 +802,7 @@ def order_target_value_(context, security, value):
             mail_to_clients(order.security, secname, posInPercent, order.price, tradedatetime, '小市值策略改进版')
         if g.is_autotrader_inform_enabled:
             # inform auto trader to do the trade
-            autotrader_stock_trade(order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+            autotrader_stock_trade('小市值策略改进版', order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
             if g.online_response_code == 0:
                 rspcode = do_record_offline()
                 if rspcode != g.online_response_code:

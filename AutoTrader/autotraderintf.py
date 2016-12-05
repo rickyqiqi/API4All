@@ -86,7 +86,7 @@ def autotrader_online_status(status):
 # price: 平均成交价格, 已经成交的股票的平均成交价格(一个订单可能分多次成交)
 # order_id: 订单ID
 # 返回值：无
-def autotrader_stock_trade(security, secname, value, price, tradedatetime, orderid):
+def autotrader_stock_trade(policyname, security, secname, value, price, tradedatetime, orderid):
     msg_data = {}
 
     accountpasswords = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
@@ -101,6 +101,7 @@ def autotrader_stock_trade(security, secname, value, price, tradedatetime, order
     msg_data["password"] = m1.hexdigest()
     msg_data["marketCode"] = 'cn'
     msg_data["txnTime"] = tradedatetime.strftime("%Y-%m-%d %H:%M:%S")
+    msg_data["policyName"] = policyname
     msg_data["security"] = security
     msg_data["secname"] = secname
     msg_data["value"] = value

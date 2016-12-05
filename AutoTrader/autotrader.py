@@ -106,6 +106,10 @@ def stocktrade():
             logger.error('JSON key \"password\" related error')
             # response with parameters error
             response_data["txnCode"] = 1
+        elif not (json_decode.has_key('policyName') and type(json_decode["policyName"]) == types.UnicodeType):
+            logger.error('JSON key \"policyName\" related error')
+            # response with parameters error
+            response_data["txnCode"] = 1
         elif not (json_decode.has_key('marketCode') and type(json_decode["marketCode"]) == types.UnicodeType):
             logger.error('JSON key \"marketCode\" related error')
             # response with parameters error
@@ -156,15 +160,15 @@ def stocktrade():
                     if json_decode["password"] == m2.hexdigest():
                         if json_decode["marketCode"] == "cn":
                             ret = True
-                            logger.debug("To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
-                                  %(json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
+                            logger.debug("%s - To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
+                                  %(json_decode["policyName"], json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
 
                             security = json_decode["security"]
                             secname = json_decode["secname"]
                             value = json_decode["value"]
                             price = json_decode["price"]
                             tradedatetime = json_decode["txnTime"]
-                            mailer = threading.Thread(target=mail_to_clients, args=[security, secname, value, price, tradedatetime, '小市值策略改进版'])
+                            mailer = threading.Thread(target=mail_to_clients, args=[json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"]])
                             mailer.start()
 
                             if ret:
@@ -197,7 +201,7 @@ def stocktrade():
     telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
     return json_response
 
-def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
+def mail_to_clients(policyname, security, secname, value, price, tradedatetime):
     # 第三方 SMTP 服务
     mail_host=""  #设置服务器
     mail_user=""    #用户名
