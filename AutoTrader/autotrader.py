@@ -14,6 +14,7 @@ from flask import Flask
 from flask import request
 import logging
 import logging.config
+import sqlite3
 
 app = Flask(__name__)
 
@@ -162,14 +163,8 @@ def stocktrade():
                             ret = True
                             logger.debug("%s - To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
                                   %(json_decode["policyName"], json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
-
-                            security = json_decode["security"]
-                            secname = json_decode["secname"]
-                            value = json_decode["value"]
-                            price = json_decode["price"]
-                            tradedatetime = json_decode["txnTime"]
-                            mailer = threading.Thread(target=mail_to_clients, args=[json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"]])
-                            mailer.start()
+                            # mail information to database
+                            mail_to_db(json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"])
 
                             if ret:
                                 # response with success
@@ -201,87 +196,38 @@ def stocktrade():
     telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
     return json_response
 
-def mail_to_clients(policyname, security, secname, value, price, tradedatetime):
-    # 第三方 SMTP 服务
-    mail_host=""  #设置服务器
-    mail_user=""    #用户名
-    mail_pass=""   #口令
-    sender = ""
-    receivers = []  # 接收邮件，可设置为你的QQ邮箱或者其他邮箱
-
-    mailinfofile = '/var/www/autotrader/config/maillist.conf'
+def mail_to_db(policyname, security, secname, value, price, tradedatetime):
     try:
-        fp = open(mailinfofile, 'r')
-        jsoncontent = fp.read()
-        fp.close()
-        content = json.loads(jsoncontent)
+        # 连接到SQLite数据库
+        conn = sqlite3.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
+        # 创建一个Cursor
+        cursor = conn.cursor()
+        # 查询收件人表数据结构
+        cursor.execute('pragma table_info(receivers)')
+        receiversstruct = [list(item)[1] for item in cursor.fetchall()]
+        # 执行收件人表查询语句
+        cursor.execute('select * from receivers where enabled=?', ('1',))
+        receiversdata = cursor.fetchall()
+        
+        for i in range(len(receiversstruct)):
+            if receiversstruct[i] == 'address':
+                receivers = [list(item)[i] for item in receiversdata]
+                break
 
-        if content.has_key('smtphost'):
-            mail_host = content["smtphost"]
-        if content.has_key('account'):
-            mail_user = content["account"]
-        if content.has_key('password'):
-            mail_pass = content["password"]
-        if content.has_key('sender'):
-            sender = content["sender"]
-        if content.has_key('receivers'):
-            receivers = content["receivers"]
+        mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime, secname, security, value*100, price)
+        recvstr = ""
+        for str in receivers:
+            recvstr = recvstr + str + ','
+        # 删除最后一个逗号
+        recvstr = recvstr[:-1]
+        logger.debug("邮件信息存入客户邮件数据库：%s, %s" % (mail_msg, recvstr))
+        cursor.execute('insert into mails (content, receivers) values (?, ?)', (mail_msg, recvstr))
+
+        cursor.close()
+        conn.commit()
+        conn.close()
     except:
-        logger.error("配置文件%s读取错误" %(mailinfofile))
-
-    if mail_host == "":
-        logger.error("SMTP主机配置空")
-        return
-    elif mail_user == "":
-        logger.error("邮件发送账户空")
-        return
-    elif len(receivers) == 0:
-        logger.error("邮件接受列表空")
-        return
-
-    mail_msg = """<p>策略名称：%s</p><p>调仓日期：%s</p><p>股票名称：%s</p><p>股票代码：%s</p><p>目标仓位：%.4f%%</p><p>目标价格：%.2f</p>""" %(policyname, tradedatetime, secname, security, value*100, price)
-
-    failedlist = []
-    # 按收件人一封封地发邮件，以避免被视为垃圾邮件
-    for item in receivers:
-        message = MIMEText(mail_msg, 'html', 'utf-8')
-        message['From'] = "<%s>" %(sender)
-        subject = policyname + '买卖信号'
-        message['Subject'] = Header(subject, 'utf-8')
-        message['To'] = "<%s>" %(item)
-        logger.info("发送邮件至：%s", item)
-
-        try:
-            smtpObj = smtplib.SMTP()
-            #smtpObj.set_debuglevel(1)
-            smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
-            smtpObj.login(mail_user,mail_pass)
-            smtpObj.sendmail(sender, item, message.as_string())
-            smtpObj.quit()
-            logger.info("邮件发送成功")
-        except smtplib.SMTPException:
-            failedlist.append(item)
-            logger.error("无法发送邮件")
-
-    # 发送失败的收件人再次尝试重发邮件
-    for item in failedlist:
-        message = MIMEText(mail_msg, 'html', 'utf-8')
-        message['From'] = "<%s>" %(sender)
-        subject = policyname + '买卖信号'
-        message['Subject'] = Header(subject, 'utf-8')
-        message['To'] = "<%s>" %(item)
-        logger.info("发送邮件至：%s", item)
-
-        try:
-            smtpObj = smtplib.SMTP()
-            #smtpObj.set_debuglevel(1)
-            smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
-            smtpObj.login(mail_user,mail_pass)
-            smtpObj.sendmail(sender, item, message.as_string())
-            smtpObj.quit()
-            logger.info("邮件再次发送成功")
-        except smtplib.SMTPException:
-            logger.error("再次发送仍无法发送邮件")
+        logger.error("客户邮件数据库操作失败")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
