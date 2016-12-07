@@ -1,5 +1,6 @@
 #coding=utf-8
 
+import os
 import sys
 import types
 import time
@@ -165,6 +166,11 @@ def stocktrade():
                                   %(json_decode["policyName"], json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
                             # mail information to database
                             mail_to_db(json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"])
+                            # check if mail sender process in running, if not start it
+                            cmd_line = 'python /var/www/autotrader/mailsender/mailsender.py'
+                            cmd_output = os.popen("pgrep -f \'%s\'" % (cmd_line)).read()
+                            if cmd_output == '':
+                                os.popen("%s &" % (cmd_line))
 
                             if ret:
                                 # response with success
