@@ -9,6 +9,9 @@ from email.header import Header
 import logging
 import logging.config
 import sqlite3
+import base64
+from Crypto import Random
+from Crypto.Cipher import AES
 
 def send_mails():
     accountstruct = []
@@ -52,6 +55,14 @@ def send_mails():
     if start > 0 and end > start:
         policyname = mail_msg[start:end]
 
+    key = b'Auto]8[Trader]@3'
+    iv = b'@Trader[9t1]Auto'
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    cipher_password64 = mail_pass.encode('utf-8')
+    cipher_password = base64.decodestring(cipher_password64)
+    password = cipher.decrypt(cipher_password)
+    password = password.strip(b'\0')
+    password = password.decode('utf-8')
     # 避免使用列表引用
     recvUnsent = receivers[:]
     # 按收件人一封封地发邮件，以避免被视为垃圾邮件
@@ -67,7 +78,7 @@ def send_mails():
             smtpObj = smtplib.SMTP()
             #smtpObj.set_debuglevel(1)
             smtpObj.connect(mail_host, 25)    # 25 为 SMTP 端口号
-            smtpObj.login(mail_user,mail_pass)
+            smtpObj.login(mail_user, password)
             smtpObj.sendmail(sender, item, message.as_string())
             smtpObj.quit()
             # remove the item from unsent list
