@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from email.header import Header
 import logging
 import logging.config
-import sqlite3
+from pysqlcipher3 import dbapi2 as sqlite
 import base64
 from Crypto import Random
 from Crypto.Cipher import AES
@@ -21,9 +21,11 @@ def send_mails():
 
     try:
         # 连接到SQLite数据库
-        conn = sqlite3.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
+        conn = sqlite.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
         # 创建一个Cursor
         cursor = conn.cursor()
+        # 秘钥
+        cursor.execute("pragma key='autotrader@8'")
         # 查询邮件表数据结构
         cursor.execute('pragma table_info(mails)')
         mailsstruct = [list(item)[1] for item in cursor.fetchall()]
@@ -89,9 +91,11 @@ def send_mails():
 
     try:
         # 连接到SQLite数据库
-        conn = sqlite3.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
+        conn = sqlite.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
         # 创建一个Cursor
         cursor = conn.cursor()
+        # 秘钥
+        cursor.execute("pragma key='autotrader@8'")
         if recvUnsent != []:
             recvstr = ""
             for str in recvUnsent:
@@ -123,9 +127,11 @@ sender = ""
 
 try:
     # 连接到SQLite数据库
-    conn = sqlite3.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
+    conn = sqlite.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
     # 创建一个Cursor
     cursor = conn.cursor()
+    # 秘钥
+    cursor.execute("pragma key='autotrader@8'")
     # 查询账户表数据结构
     cursor.execute('pragma table_info(account)')
     accountstruct = [list(item)[1] for item in cursor.fetchall()]

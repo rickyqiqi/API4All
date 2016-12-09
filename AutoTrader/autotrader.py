@@ -15,7 +15,7 @@ from flask import Flask
 from flask import request
 import logging
 import logging.config
-import sqlite3
+from pysqlcipher3 import dbapi2 as sqlite
 
 app = Flask(__name__)
 
@@ -205,9 +205,11 @@ def stocktrade():
 def mail_to_db(policyname, security, secname, value, price, tradedatetime):
     try:
         # 连接到SQLite数据库
-        conn = sqlite3.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
+        conn = sqlite.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
         # 创建一个Cursor
         cursor = conn.cursor()
+        # 秘钥
+        cursor.execute("pragma key='autotrader@8'")
         # 查询收件人表数据结构
         cursor.execute('pragma table_info(receivers)')
         receiversstruct = [list(item)[1] for item in cursor.fetchall()]
