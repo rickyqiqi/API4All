@@ -631,6 +631,11 @@ def market_stop_loss_by_28_index(context, count):
 
 # 个股止损
 def stock_stop_loss(context, data):
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    show_log = False
+    if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)):
+        show_log = True
     for stock in context.portfolio.positions.keys():
         cur_price = data[stock].close
         xi = attribute_history(stock, 2, '1d', 'high', skip_paused=True)
@@ -642,7 +647,9 @@ def stock_stop_loss(context, data):
             g.last_high[stock] = 0
             
         threshold = get_stop_loss_threshold(stock, g.period)
-        #log.debug("个股止损阈值, stock: %s, threshold: %f" %(stock, threshold))
+        # 每天指定时间输出
+        if show_log:
+            log.debug("个股止损阈值, stock: %s, threshold: %f" %(stock, threshold))
         if cur_price < g.last_high[stock] * (1 - threshold) * g.ajust_rate_4_stock_stop_loss:
             log.info("==> 个股止损, stock: %s, cur_price: %f, last_high: %f, threshold: %f" 
                 %(stock, cur_price, g.last_high[stock], threshold))
@@ -653,11 +660,18 @@ def stock_stop_loss(context, data):
 
 # 个股止盈
 def stock_stop_profit(context, data):
+    hour = context.current_dt.hour
+    minute = context.current_dt.minute
+    show_log = False
+    if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)):
+        show_log = True
     for stock in context.portfolio.positions.keys():
         position = context.portfolio.positions[stock]
         cur_price = data[stock].close
         threshold = get_stop_profit_threshold(stock, g.period)
-        #log.debug("个股止盈阈值, stock: %s, threshold: %f" %(stock, threshold))
+        # 每天指定时间输出
+        if show_log:
+            log.debug("个股止盈阈值, stock: %s, threshold: %f" %(stock, threshold))
         if cur_price > position.avg_cost * (1 + threshold) * g.ajust_rate_4_stock_stop_profit:
             log.info("==> 个股止盈, stock: %s, cur_price: %f, avg_cost: %f, threshold: %f" 
                 %(stock, cur_price, g.last_high[stock], threshold))
