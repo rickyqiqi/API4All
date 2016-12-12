@@ -229,4 +229,4 @@ if len(sys.argv) > 1:
     elif selection == 2:
         changePassword(sys.argv[1])
 else:
-    print("\nUsage: ./password.py [sqlcipher3_database_file]\n")
+    print("\nUsage: ./%s [sqlcipher3_database_file]\n" % (sys.argv[0]))
