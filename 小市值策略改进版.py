@@ -31,8 +31,27 @@ from sqlalchemy import desc
 import numpy as np
 import pandas as pd
 from scipy import stats
+import tradestat
+from autotraderintf import *
+from mailintf import *
 
 def initialize(context):
+    # 是否在调试模式下
+    g.indebug = False
+    # 在线状态响应码
+    g.online_response_code = 0
+
+    # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
+    g.real_market_simulate = False
+    runningdatetime = datetime.datetime.fromtimestamp(time.time())
+    if context.current_dt.date() == runningdatetime.date():
+        # 使用真实价格回测(模拟盘推荐如此，回测请注释)
+        set_option('use_real_price', True)
+        g.real_market_simulate = True
+
+    # 加载统计模块
+    g.trade_stat = tradestat.trade_stat()
+
     # 对比标的
     set_benchmark('000300.XSHG') 
     g.stocks = []
@@ -40,6 +59,8 @@ def initialize(context):
     g.buyStockCount = 10
     g.days = 0
     g.period = 3
+    g.adjust_position_hour = 14
+    g.adjust_position_minute = 50
     g.maxrbstd = {}
     g.exceptions = []
     g.stopstocks = 0
@@ -54,6 +75,20 @@ def initialize(context):
     # 多头趋势天数
     g.in_trend_days = 7
 
+    # 配置是否开启autotrader通知
+    g.is_autotrader_inform_enabled = False
+
+    # 打印策略参数
+    log_param()
+
+def log_param():
+    log.info("---------------------------------------------")
+    log.info("是否是调试模式: %s" %(g.indebug))
+    log.info("调仓日频率: %d日" %(g.period))
+    log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
+
+    log.info("买入股票数目: %d" %(g.stockCount))
+    log.info("是否开启autotrader通知: %s" %(g.is_autotrader_inform_enabled))
 
 def getStockPrice(stock, interval):
     h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
@@ -72,7 +107,8 @@ def filterStarName(stock_list):
 
 def sell_all_stocks(context):
     for stock in context.portfolio.positions.keys():
-            order_target_value(stock, 0)
+            position = context.portfolio.positions[stock]
+            close_position(context, position)
             print('Sell: ',stock)
             curr_data = get_current_data()
             print curr_data[stock].name
@@ -289,6 +325,18 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
 
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
+    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
+        # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
+        if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
+            # 通信状态变化，发邮件通知
+            rspcode = autotrader_online_status(0)
+            if rspcode != g.online_response_code:
+                g.online_response_code = rspcode
+                mail_to_report(rspcode)
+        # 检查离线记录文件是否有未完成的离线交易，完成离线交易
+        if g.online_response_code == 0:
+            do_record_offline()
+
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
@@ -322,7 +370,8 @@ def handle_data(context, data):
             #except KeyError:
             #    g.maxvalue[stock] = data[stock].close
             #if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
-            #    if order_target_value(stock, 0) !=None :
+            #    position = context.portfolio.positions[stock]
+            #    if close_position(context, position):
             #        todobuy = True
             #        print('止损: ')
             #        g.exceptions.append({'stock': stock, 'days': 0})
@@ -337,7 +386,8 @@ def handle_data(context, data):
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
-                if order_target_value(stock, 0) != None:
+                position = context.portfolio.positions[stock]
+                if close_position(context, position):
                     todobuy = True
                     g.stopstocks += 1
                     print('止损: ')
@@ -346,7 +396,8 @@ def handle_data(context, data):
                     curr_data = get_current_data()
                     print curr_data[stock].name
             elif dr3cur >= g.maxrbstd[stock]['maxr']*1.100:
-                if order_target_value(stock, 0) != None:
+                position = context.portfolio.positions[stock]
+                if close_position(context, position):
                     todobuy = True
                     print('止盈: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
@@ -422,8 +473,8 @@ def handle_data(context, data):
 #            g.stockrecommend = []
 #            print('不推荐买入股票')
 
-    # 每天下午14:53调仓
-    if hour ==14 and minute==50:
+    # 每天下午14:50调仓
+    if hour == g.adjust_position_hour and minute== g.adjust_position_minute:
         #奇怪，低于101%时清仓，回测效果出奇得好。
         if ret2>0.01 or ret8>0.01 :
             g.days += 1
@@ -434,6 +485,60 @@ def handle_data(context, data):
         else :
             print('清仓')
             sell_all_stocks(context)
+
+# 开仓，买入指定价值的证券
+# 报单成功并成交（包括全部成交或部分成交，此时成交量大于0），返回True
+# 报单失败或者报单成功但被取消（此时成交量等于0），返回False
+def open_position(context, security, value):
+    order = order_target_value_(context, security, value)
+    if order != None and order.filled > 0:
+        return True
+    return False
+
+# 平仓，卖出指定持仓
+# 平仓成功并全部成交，返回True
+# 报单失败或者报单成功但被取消（此时成交量等于0），或者报单非全部成交，返回False
+def close_position(context, position):
+    security = position.security
+    order = order_target_value_(context, security, 0) # 可能会因停牌失败
+    if order != None:
+        if order.filled > 0:
+            # 只要有成交，无论全部成交还是部分成交，则统计盈亏
+            g.trade_stat.watch(security, order.filled, position.avg_cost, position.price)
+
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+
+    return False
+
+# 自定义下单
+# 根据Joinquant文档，当前报单函数都是阻塞执行，报单函数（如order_target_value）返回即表示报单完成
+# 报单成功返回报单（不代表一定会成交），否则返回None
+def order_target_value_(context, security, value):
+    if value == 0:
+        log.debug("Selling out %s" % (security))
+    else:
+        log.debug("Order %s to value %f" % (security, value))
+        
+    # 如果股票停牌，创建报单会失败，order_target_value 返回None
+    # 如果股票涨跌停，创建报单会成功，order_target_value 返回Order，但是报单会取消
+    # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
+    order = order_target_value(security, value)
+    # 模拟式盘情况下，订单非空
+    if (g.real_market_simulate or g.indebug) and order != None:
+        tradedatetime = context.current_dt
+        posInPercent = value/context.portfolio.total_value
+        curr_data = get_current_data()
+        secname = curr_data[order.security].name
+        if g.is_autotrader_inform_enabled:
+            # inform auto trader to do the trade
+            autotrader_stock_trade('小市值策略改进版', order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+            if g.online_response_code == 0:
+                rspcode = do_record_offline()
+                if rspcode != g.online_response_code:
+                    g.online_response_code = rspcode
+                    rspcode = mail_to_report(rspcode)
+    return order
 
 def isThreeBlackCrows(stock, data):
     his =  attribute_history(stock, 2, '1d', ('close','open'), skip_paused=True, df=False)
@@ -461,7 +566,8 @@ def buy_stocks(context, data):
     for stock in context.portfolio.positions.keys():
         #确保股票数大于0，且该股票不在新选中的股票池内
         if (context.portfolio.positions[stock].total_amount > 0) and (stock not in g.stocks):
-            if order_target_value(stock, 0)==None :
+            position = context.portfolio.positions[stock]
+            if not close_position(context, position) :
                 #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
                 g.stocks.pop()
                 g.stocks.insert(0, stock)
@@ -481,8 +587,9 @@ def buy_stocks(context, data):
     # place equally weighted orders
     #已有股票数量>=4个，则直接返回
     if valid_count < len(g.stocks):
+        value = context.portfolio.total_value / len(g.stocks)
         for stock in g.stocks:
-            order_target_value(stock, context.portfolio.portfolio_value/len(g.stocks))
+            open_position(context, stock, value)
             print('buy: ',stock)
             curr_data = get_current_data()
             print curr_data[stock].name
@@ -555,3 +662,20 @@ def before_trading_start(context):
     #g.maxvalue = maxvalue
     
     g.stopstocks = 0
+
+#================================================================================
+#每天收盘后
+#================================================================================
+def after_trading_end(context):
+    g.trade_stat.report(context)
+
+    # 模拟实盘情况下执行
+    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
+        # 删除当天未完成的离线交易记录
+        rm_all_records_offline()
+
+    # 得到当前未完成订单
+    orders = get_open_orders()
+    for _order in orders.values():
+        log.info("canceled uncompleted order: %s" %(_order.order_id))
+    pass
