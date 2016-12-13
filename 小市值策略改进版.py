@@ -66,14 +66,17 @@ def initialize(context):
     g.stopstocks = 0
     #g.maxvalue = {} # 购买之后的最高价列表
     #g.stockrecommend = []
-  # 测试多头趋势的均线长度
-    g.ma_lengths = [5,10,20,60,120]
-    # 测试买入回踩的均线长度
-    g.test_ma_length = 10
-    # 买入时回踩但必须站住的均线
-    g.stand_ma_length = 10
-    # 多头趋势天数
-    g.in_trend_days = 7
+    # 股票多头趋势加分项参数
+    g.rank_stock_score_plus_allowed = False
+    if g.rank_stock_score_plus_allowed:
+        # 测试多头趋势的均线长度
+        g.ma_lengths = [5,10,20,60,120]
+        # 测试买入回踩的均线长度
+        g.test_ma_length = 10
+        # 买入时回踩但必须站住的均线
+        g.stand_ma_length = 10
+        # 多头趋势天数
+        g.in_trend_days = 7
 
     # 配置是否开启autotrader通知
     g.is_autotrader_inform_enabled = False
@@ -209,7 +212,8 @@ def Multi_Select_Stocks(context, data):
     stocks = unpaused(stocks)
     stocks = filterStarName(stocks)
 
-    addscorelist = get_in_trends(stocks, context)
+    if g.rank_stock_score_plus_allowed:
+        addscorelist = get_in_trends(stocks, context)
 
     q = query(
         valuation.code,
@@ -257,8 +261,9 @@ def Multi_Select_Stocks(context, data):
         currPrice = data[s].close
         #score = (currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15)
         score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
-        if s in addscorelist :
-            score -= 0.08
+        if g.rank_stock_score_plus_allowed:
+            if s in addscorelist :
+                score -= 0.08
         stock_select[s] = score
 
     # 确保有股票被选中
