@@ -383,9 +383,7 @@ def handle_data(context, data):
             cmp8result = False
     else:
         ret8 = 0
-    if ((hour >= 9 and hour <= 11) and (minute == 30)) or ((hour >= 13 and hour <= 15) and (minute == 0)) or (hour == 14 and minute == 50):
-        print '----二八指数20日涨幅----'
-        print (ret2,ret8)
+    record(index2=ret2, index8=ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
