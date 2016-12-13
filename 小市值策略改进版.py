@@ -27,6 +27,8 @@
 #14.每分钟监测股价，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
 
 
+import types
+import json
 from sqlalchemy import desc
 import numpy as np
 import pandas as pd
@@ -35,7 +37,51 @@ import tradestat
 from autotraderintf import *
 from mailintf import *
 
-def initialize(context):
+# 获取配置值
+def get_variables_updated(addstring):
+    # 配置值文件
+    if g.real_market_simulate:
+        configfilename = 'config/real_%s.conf' %(addstring)
+    else:
+        configfilename = 'config/loop_%s.conf' %(addstring)
+
+    try:
+        jsoncontent = read_file(configfilename)
+        content = json.loads(jsoncontent)
+
+        if content.has_key('version') and type(content["version"]) == types.FloatType:
+            version = content["version"]
+            # 更新初始化函数里的赋值
+            if version > g.version:
+                # 需更新的数值写在这
+                if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType:
+                    g.indebug = content["g.indebug"]
+                if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType:
+                    g.stockCount = content["g.stockCount"]
+                if content.has_key('g.rank_stock_score_plus_allowed') and type(content["g.rank_stock_score_plus_allowed"]) == types.BooleanType:
+                    g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
+                if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType:
+                    g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
+                if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType:
+                    g.stock_candidates = content["g.stock_candidates"]
+                if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType:
+                    g.index_stock_2_select = content["g.index_stock_2_select"]
+                if content.has_key('g.index_pool') and type(content["g.index_pool"]) == types.ListType:
+                    g.index_pool = content["g.index_pool"]
+
+                g.version = version
+                return True
+    except:
+        log.error("配置文件%s读取错误" %(configfilename))
+
+    return False
+
+def initialize(context):# 参数版本号
+    g.version = 0.0
+
+    # additional string in variable configuration file name
+    g.addstring = "smallshare001"
+
     # 是否在调试模式下
     g.indebug = False
     # 在线状态响应码
@@ -79,7 +125,15 @@ def initialize(context):
         g.in_trend_days = 7
 
     # 配置是否开启autotrader通知
-    g.is_autotrader_inform_enabled = False
+    g.autotrader_inform_enabled = False
+
+    # 备选股票池，空表示所有股票备选
+    g.stock_candidates = []
+    # 是否使用指数池选股配置
+    g.index_stock_2_select = False
+    if g.index_stock_2_select:
+        # 指数池，默认上证50指数
+        g.index_pool = ["000016.XSHG"]
 
     # 打印策略参数
     log_param()
@@ -87,11 +141,18 @@ def initialize(context):
 def log_param():
     log.info("---------------------------------------------")
     log.info("是否是调试模式: %s" %(g.indebug))
+    log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
 
     log.info("买入股票数目: %d" %(g.stockCount))
-    log.info("是否开启autotrader通知: %s" %(g.is_autotrader_inform_enabled))
+    log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
+
+    log.info("备选股票池: %s" %(str(g.stock_candidates)))
+    log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
+    if g.index_stock_2_select:
+        log.info("指数池: %s" %(str(g.index_pool)))
+    log.info("---------------------------------------------")
 
 def getStockPrice(stock, interval):
     h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
@@ -201,9 +262,25 @@ def Multi_Select_Stocks(context, data):
         elif (dstock['targetvalue'] != 0.0) and ((data[dstock['stock']].close-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
             g.exceptions.remove(dstock)
 
-    stocks = get_all_securities(['stock'])
-    #排除新股
-    stocks = stocks[(context.current_dt.date() - stocks.start_date) > datetime.timedelta(60)].index
+    # 获取备选股票
+    stocks = []
+    # 是否使用指数池选股配置
+    if g.index_stock_2_select:
+        log.info("指数股票池：%s" % (str(g.index_pool)))
+        # 指数池
+        for index in g.index_pool:
+            stocks += get_index_stocks(index)
+    else:
+        # 备选股票池，空表示所有股票备选
+        if len(g.stock_candidates) == 0:
+            log.info("所有股票池")
+            candidates = get_all_securities(['stock'])
+            #排除新股
+            stocks = candidates[(context.current_dt.date() - candidates.start_date) > datetime.timedelta(60)].index
+        else:
+            log.info("备选股票池: %s" %(str(g.stock_candidates)))
+            stocks = g.stock_candidates
+
     #stocks  = stocks.index
     date=context.current_dt.strftime("%Y-%m-%d")
     st=get_extras('is_st', stocks, start_date=date, end_date=date, df=True)
@@ -330,7 +407,7 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
 
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
-    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
+    if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
         # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
         if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
             # 通信状态变化，发邮件通知
@@ -535,7 +612,7 @@ def order_target_value_(context, security, value):
         posInPercent = value/context.portfolio.total_value
         curr_data = get_current_data()
         secname = curr_data[order.security].name
-        if g.is_autotrader_inform_enabled:
+        if g.autotrader_inform_enabled:
             # inform auto trader to do the trade
             autotrader_stock_trade('小市值策略改进版', order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
             if g.online_response_code == 0:
@@ -633,6 +710,11 @@ def update_maxr_bstd(context):
 #每天开盘前
 #================================================================================
 def before_trading_start(context):
+    # 检查变量是否在文件中更新
+    if get_variables_updated(g.addstring):
+        # 打印策略参数
+        log_param()
+
     # 将滑点设置为0
     set_slippage(FixedSlippage(0)) 
     # 根据不同的时间段设置手续费
@@ -675,7 +757,7 @@ def after_trading_end(context):
     g.trade_stat.report(context)
 
     # 模拟实盘情况下执行
-    if (g.real_market_simulate or g.indebug) and g.is_autotrader_inform_enabled:
+    if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
         # 删除当天未完成的离线交易记录
         rm_all_records_offline()
 
