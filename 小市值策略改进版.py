@@ -488,44 +488,49 @@ def handle_data(context, data):
                     print curr_data[stock].name
 
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
-    if (stockscrashed > 0 and g.stopstocks > 0 and len(g.stocks) > 0) and (stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks)) :
+    if (len(g.stocks) > 0) and (stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks)) :
         todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
             print ('多只股票达到止损线，清仓')
             sell_all_stocks(context)
-        # 修整1天，设置为2，避免当天再次买入股票
-        g.days = 2
+            # 修整1天，设置为2，避免当天再次买入股票
+            g.days = 2
 
-    hs2 = getStockPrice(zs2, lag)
-    hs8 = getStockPrice(zs8, lag)
-    cp2 = data[zs2].close
-    cp8 = data[zs8].close
+    ret2 = 0
+    ret8 = 0
+    pos_adjust_time = (hour == g.adjust_position_hour and minute== g.adjust_position_minute)
+    # 有仓位、调仓时间或实盘时检查二八指标
+    if (context.portfolio.positions_value > 0) or pos_adjust_time or g.real_market_simulate:
+        hs2 = getStockPrice(zs2, lag)
+        hs8 = getStockPrice(zs8, lag)
+        cp2 = data[zs2].close
+        cp8 = data[zs8].close
 
-    cmp2result = True
-    cmp8result = True
-    if (not isnan(hs2)) and (not isnan(cp2)):
-        ret2 = (cp2 - hs2) / hs2;
-        if ret2>-0.004 :
-            cmp2result = False
-    else:
-        ret2 = 0
-    if (not isnan(hs8)) and (not isnan(cp8)):
-        ret8 = (cp8 - hs8) / hs8;
-        if ret8>-0.004 :
-            cmp8result = False
-    else:
-        ret8 = 0
-    record(index2=ret2, index8=ret8)
+        cmp2result = True
+        cmp8result = True
+        if (not isnan(hs2)) and (not isnan(cp2)):
+            ret2 = (cp2 - hs2) / hs2
+            if ret2>-0.004 :
+                cmp2result = False
+        else:
+            ret2 = 0
+        if (not isnan(hs8)) and (not isnan(cp8)):
+            ret8 = (cp8 - hs8) / hs8
+            if ret8>-0.004 :
+                cmp8result = False
+        else:
+            ret8 = 0
+        record(index2=ret2, index8=ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
-    if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
-        if context.portfolio.positions_value > 0 :
+    if context.portfolio.positions_value > 0 :
+        if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
             print ('二八未满足条件，清仓')
             sell_all_stocks(context)
-        # 修整1天，设置为2，避免当天再次买入股票
-        g.days = 2
+            # 修整1天，设置为2，避免当天再次买入股票
+            g.days = 2
 
 #    if (minute%30 == 0) :
 #        hs2 = getStockPrice(zs2, lag)
@@ -556,7 +561,7 @@ def handle_data(context, data):
 #            print('不推荐买入股票')
 
     # 每天下午14:50调仓
-    if hour == g.adjust_position_hour and minute== g.adjust_position_minute:
+    if pos_adjust_time:
         #奇怪，低于101%时清仓，回测效果出奇得好。
         if ret2>0.01 or ret8>0.01 :
             g.days += 1
