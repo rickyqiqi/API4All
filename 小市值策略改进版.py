@@ -113,7 +113,7 @@ def initialize(context):# 参数版本号
     #g.maxvalue = {} # 购买之后的最高价列表
     #g.stockrecommend = []
     # 股票多头趋势加分项参数
-    g.rank_stock_score_plus_allowed = False
+    g.rank_stock_score_plus_allowed = True
     if g.rank_stock_score_plus_allowed:
         # 测试多头趋势的均线长度
         g.ma_lengths = [5,10,20,60,120]
@@ -130,7 +130,7 @@ def initialize(context):# 参数版本号
     # 备选股票池，空表示所有股票备选
     g.stock_candidates = []
     # 是否使用指数池选股配置
-    g.index_stock_2_select = False
+    g.index_stock_2_select = True
     if g.index_stock_2_select:
         # 指数池，默认上证50指数
         g.index_pool = ["000016.XSHG"]
