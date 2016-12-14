@@ -422,8 +422,8 @@ def handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
-        
-    zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
+
+    zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
     zs8 =  '159902.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
     if context.current_dt>datetime.datetime(2008,7, 28):
         zs8 =  '399005.XSHE'
@@ -521,7 +521,16 @@ def handle_data(context, data):
                 cmp8result = False
         else:
             ret8 = 0
-        record(index2=ret2, index8=ret8)
+        # 获取超大盘指数均线
+        zs1 =  '000016.XSHG' #上证50指数
+        hs1 = getStockPrice(zs1, lag)
+        cp1 = data[zs1].close
+
+        if (not isnan(hs1)) and (not isnan(cp1)):
+            ret1 = (cp1 - hs1) / hs1
+        else:
+            ret1 = 0
+        record(index1=ret1, index2=ret2, index8=ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0 :
