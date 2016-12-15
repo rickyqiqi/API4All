@@ -87,16 +87,25 @@ def initialize(context):# 参数版本号
     # 在线状态响应码
     g.online_response_code = 0
 
-    # 当前是否是模拟实盘，回测盘的context.current_dt日期和time.time()日期不同
+    # run_params: 表示此次运行的参数, 有如下属性
+    # start_date: 回测/模拟开始日期, datetime.date对象
+    # end_date: 回测/模拟结束日期, datetime.date对象
+    # type: 运行方式, 如下三个字符串之一
+    # 'simple_backtest': 回测, 通过点击’编译运行’运行
+    # 'full_backtest': 回测, 通过点击’运行回测’运行
+    # 'sim_trade': 模拟交易
     g.real_market_simulate = False
-    runningdatetime = datetime.datetime.fromtimestamp(time.time())
-    if context.current_dt.date() == runningdatetime.date():
+    if context.run_params.type == 'sim_trade':
         # 使用真实价格回测(模拟盘推荐如此，回测请注释)
         set_option('use_real_price', True)
         g.real_market_simulate = True
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
+    
+    g.ret1 = 0
+    g.ret2 = 0
+    g.ret8 = 0
 
     # 对比标的
     set_benchmark('000300.XSHG') 
@@ -423,6 +432,7 @@ def handle_data(context, data):
     hour = context.current_dt.hour
     minute = context.current_dt.minute
 
+    zs1 =  '000016.XSHG' #上证50指数
     zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
     zs8 =  '159902.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
     if context.current_dt>datetime.datetime(2008,7, 28):
@@ -497,40 +507,40 @@ def handle_data(context, data):
             # 修整1天，设置为2，避免当天再次买入股票
             g.days = 2
 
-    ret2 = 0
-    ret8 = 0
     pos_adjust_time = (hour == g.adjust_position_hour and minute== g.adjust_position_minute)
     # 有仓位、调仓时间或实盘时检查二八指标
     if (context.portfolio.positions_value > 0) or pos_adjust_time or g.real_market_simulate:
+        # 获取超大盘指数均线
+        hs1 = getStockPrice(zs1, lag)
         hs2 = getStockPrice(zs2, lag)
         hs8 = getStockPrice(zs8, lag)
+        cp1 = data[zs1].close
         cp2 = data[zs2].close
         cp8 = data[zs8].close
 
+        cmp1result = True
         cmp2result = True
         cmp8result = True
-        if (not isnan(hs2)) and (not isnan(cp2)):
-            ret2 = (cp2 - hs2) / hs2
-            if ret2>-0.004 :
-                cmp2result = False
-        else:
-            ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            ret8 = (cp8 - hs8) / hs8
-            if ret8>-0.004 :
-                cmp8result = False
-        else:
-            ret8 = 0
-        # 获取超大盘指数均线
-        zs1 =  '000016.XSHG' #上证50指数
-        hs1 = getStockPrice(zs1, lag)
-        cp1 = data[zs1].close
 
         if (not isnan(hs1)) and (not isnan(cp1)):
-            ret1 = (cp1 - hs1) / hs1
+            g.ret1 = (cp1 - hs1) / hs1
+            if g.ret1>-0.004 :
+                cmp1result = False
         else:
-            ret1 = 0
-        record(index1=ret1, index2=ret2, index8=ret8)
+            g.ret1 = 0
+        if (not isnan(hs2)) and (not isnan(cp2)):
+            g.ret2 = (cp2 - hs2) / hs2
+            if g.ret2>-0.004 :
+                cmp2result = False
+        else:
+            g.ret2 = 0
+        if (not isnan(hs8)) and (not isnan(cp8)):
+            g.ret8 = (cp8 - hs8) / hs8
+            if g.ret8>-0.004 :
+                cmp8result = False
+        else:
+            g.ret8 = 0
+        record(index1=g.ret1, index2=g.ret2, index8=g.ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0 :
@@ -572,7 +582,7 @@ def handle_data(context, data):
     # 每天下午14:50调仓
     if pos_adjust_time:
         #奇怪，低于101%时清仓，回测效果出奇得好。
-        if ret2>0.01 or ret8>0.01 :
+        if g.ret1>0.01 or g.ret8>0.01 :
             g.days += 1
             if todobuy or (g.days % g.period == 1):            
                 print('持有，每3天进行调仓')
@@ -763,6 +773,10 @@ def before_trading_start(context):
     #g.maxvalue = maxvalue
     
     g.stopstocks = 0
+
+    g.ret1 = 0
+    g.ret2 = 0
+    g.ret8 = 0
 
 #================================================================================
 #每天收盘后
