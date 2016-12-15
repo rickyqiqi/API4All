@@ -182,9 +182,8 @@ def sell_all_stocks(context):
     for stock in context.portfolio.positions.keys():
             position = context.portfolio.positions[stock]
             close_position(context, position)
-            print('Sell: ',stock)
             curr_data = get_current_data()
-            print curr_data[stock].name
+            log.info("Sell: %s(%s)" %(curr_data[stock].name, stock))
     #很关键！第一次写程序的时候没有这一句，会造成下面的无法买入。
     g.days = 0          
 
@@ -275,7 +274,7 @@ def Multi_Select_Stocks(context, data):
     stocks = []
     # 是否使用指数池选股配置
     if g.index_stock_2_select:
-        log.info("指数股票池：%s" % (str(g.index_pool)))
+        log.info("指数股票池：%s" %(str(g.index_pool)))
         # 指数池
         for index in g.index_pool:
             stocks += get_index_stocks(index)
@@ -325,8 +324,8 @@ def Multi_Select_Stocks(context, data):
                 skipit = True
                 break
         if skipit:
-            print('排除之前被止盈止损的股票')
-            print s
+            log.info('排除之前被止盈止损的股票')
+            log.info('%s' %(s))
             continue
 
         #排除符合止盈止损条件的股票
@@ -410,7 +409,7 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
                         breakout = False
                         break
         if breakout :
-            print '.............股票跌幅过大...............'
+            log.info('.............股票跌幅过大...............')
             return True
     return False
 
@@ -444,7 +443,7 @@ def handle_data(context, data):
 #        for stock in g.stocks:
 #            if context.portfolio.positions[stock].sellable_amount > 0:
 #                #有仓位就清仓
-#    		    print ('三只乌鸦，清仓')
+#    		    log.info('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
 #    	#设置为2，避免当天再次买入股票
 #    	g.days = 2
@@ -465,11 +464,10 @@ def handle_data(context, data):
             #    position = context.portfolio.positions[stock]
             #    if close_position(context, position):
             #        todobuy = True
-            #        print('止损: ')
+            #        log.info('止损: ')
             #        g.exceptions.append({'stock': stock, 'days': 0})
-            #        print('Sell: ',stock,data[stock].close,g.maxvalue[stock])
             #        curr_data = get_current_data()
-            #        print curr_data[stock].name
+            #        log.info('Sell: %s(%s), %02f, %02f' %(curr_data[stock].name, stock,data[stock].close,g.maxvalue[stock]))
 
             # 对当天下跌幅度过大的股票进行计数统计
             #if isStockBearish(stock, data, 5, 0.05, 0.02) :
@@ -482,27 +480,25 @@ def handle_data(context, data):
                 if close_position(context, position):
                     todobuy = True
                     g.stopstocks += 1
-                    print('止损: ')
+                    log.info('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
-                    print('Sell: ',stock)
                     curr_data = get_current_data()
-                    print curr_data[stock].name
+                    log.info('Sell: %s(%s)' %(curr_data[stock].name, stock))
             elif dr3cur >= g.maxrbstd[stock]['maxr']*1.100:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
                     todobuy = True
-                    print('止盈: ')
+                    log.info('止盈: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
-                    print('Sell: ',stock)
                     curr_data = get_current_data()
-                    print curr_data[stock].name
+                    log.info('Sell: %s(%s)' %(curr_data[stock].name, stock))
 
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
     if (len(g.stocks) > 0) and (stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks)) :
         todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
-            print ('多只股票达到止损线，清仓')
+            log.info('多只股票达到止损线，清仓')
             sell_all_stocks(context)
             # 修整1天，设置为2，避免当天再次买入股票
             g.days = 2
@@ -546,7 +542,7 @@ def handle_data(context, data):
     if context.portfolio.positions_value > 0 :
         if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
-            print ('二八未满足条件，清仓')
+            log.info('二八未满足条件，清仓')
             sell_all_stocks(context)
             # 修整1天，设置为2，避免当天再次买入股票
             g.days = 2
@@ -565,7 +561,7 @@ def handle_data(context, data):
 #            ret8 = (cp8 - hs8) / hs8;
 #        else:
 #            ret8 = 0
-        #print(ret2,ret8)
+        #log.info('%03f, %03f' %(ret2,ret8))
         
         #奇怪，低于101%时清仓，回测效果出奇得好。
 #        if ret2>0.01 or ret8>0.01 :  
@@ -573,11 +569,11 @@ def handle_data(context, data):
 #            stockrecommend.sort()
 #            if cmp(g.stockrecommend, stockrecommend) != 0 :
 #                g.stockrecommend = stockrecommend
-#                print '推荐股票'
-#                print g.stockrecommend
+#                log.info('推荐股票')
+#                log.info('%s' %(str(g.stockrecommend)))
 #        elif g.stockrecommend != []:
 #            g.stockrecommend = []
-#            print('不推荐买入股票')
+#            log.info('不推荐买入股票')
 
     # 每天下午14:50调仓
     if pos_adjust_time:
@@ -585,11 +581,11 @@ def handle_data(context, data):
         if g.ret1>0.01 or g.ret8>0.01 :
             g.days += 1
             if todobuy or (g.days % g.period == 1):            
-                print('持有，每3天进行调仓')
+                log.info('持有，每3天进行调仓')
                 buy_stocks(context, data)
                 update_maxr_bstd(context)
         else :
-            print('清仓')
+            log.info('清仓')
             sell_all_stocks(context)
 
 # 开仓，买入指定价值的证券
@@ -677,9 +673,8 @@ def buy_stocks(context, data):
                 #售出股票失败（如停牌股票）的情况，需要删除后面几个多余的备选股票，使股票数保持4个
                 g.stocks.pop()
                 g.stocks.insert(0, stock)
-            print('Rank Outof 10, Sell: ',stock)
             curr_data = get_current_data()
-            print curr_data[stock].name
+            log.info('Rank Outof 10, Sell: %s(%s)' %(curr_data[stock].name, stock))
 
     #初始化新选中的股票的最高价
     #for stock in g.stocks :
@@ -696,9 +691,8 @@ def buy_stocks(context, data):
         value = context.portfolio.total_value / len(g.stocks)
         for stock in g.stocks:
             open_position(context, stock, value)
-            print('buy: ',stock)
             curr_data = get_current_data()
-            print curr_data[stock].name
+            log.info('buy: %s(%s)' %(curr_data[stock].name, stock))
 
 def update_maxr_bstd(context):
     g.maxrbstd = {}
