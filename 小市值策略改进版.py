@@ -132,7 +132,8 @@ def initialize(context):# 参数版本号
     g.adjust_position_minute = 50
     g.maxrbstd = {}
     g.exceptions = []
-    g.stopstocks = 0
+    g.stockscrashed = []
+    g.stopstocks = []
     #g.maxvalue = {} # 购买之后的最高价列表
     #g.stockrecommend = []
     # 股票多头趋势加分项参数
@@ -461,7 +462,6 @@ def handle_data(context, data):
 
     # 检查止盈止损条件，并操作股票
     todobuy = False
-    stockscrashed = 0
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
             # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
@@ -482,18 +482,21 @@ def handle_data(context, data):
             # 对当天下跌幅度过大的股票进行计数统计
             #if isStockBearish(stock, data, 5, 0.05, 0.02) :
             if data[stock].close  < 0.955*getStockPrice(stock, 1) :
-                stockscrashed += 1
+                if g.stockscrashed.count(stock) == 0:
+                    g.stockscrashed.append(stock)
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
                     todobuy = True
-                    g.stopstocks += 1
                     log.info('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     curr_data = get_current_data()
                     log.info('Sell: %s(%s)' %(curr_data[stock].name, stock))
+                # 如果该股票未包含在止损列表中，则添加进去
+                if g.stopstocks.count(stock) == 0:
+                    g.stopstocks.append(stock)
             elif dr3cur >= g.maxrbstd[stock]['maxr']*1.100:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
@@ -503,8 +506,11 @@ def handle_data(context, data):
                     curr_data = get_current_data()
                     log.info('Sell: %s(%s)' %(curr_data[stock].name, stock))
 
+    stopfactor = 1
+    if g.stockCount > 2:
+        stopfactor = 2
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
-    if (len(g.stocks) > 0) and (stockscrashed*4.0/3 >= len(g.stocks) or g.stopstocks*2 >= len(g.stocks)) :
+    if (len(g.stocks) > 0) and (len(g.stockscrashed)*4.0/3 >= len(g.stocks) or len(g.stopstocks)*stopfactor >= len(g.stocks)) :
         todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
@@ -786,8 +792,6 @@ def before_trading_start(context):
     #        else:
     #            maxvalue[stock] = 0
     #g.maxvalue = maxvalue
-    
-    g.stopstocks = 0
 
 #================================================================================
 #每天收盘后
@@ -804,6 +808,9 @@ def after_trading_end(context):
     g.gradient1 = 0
     g.gradient2 = 0
     g.gradient8 = 0
+
+    g.stockscrashed = []
+    g.stopstocks = []
 
     # 模拟实盘情况下执行
     if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
