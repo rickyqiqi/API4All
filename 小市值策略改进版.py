@@ -54,6 +54,8 @@ def get_variables_updated(addstring):
             # 更新初始化函数里的赋值
             if version > g.version:
                 # 需更新的数值写在这
+                if content.has_key('g.policy_name' ) and type(content["g.policy_name"]) == types.UnicodeType:
+                    g.policy_name = content["g.policy_name"]
                 if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType:
                     g.indebug = content["g.indebug"]
                 if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType:
@@ -82,6 +84,8 @@ def initialize(context):# 参数版本号
     # additional string in variable configuration file name
     g.addstring = "smallshare001"
 
+    g.policy_name = '小市值策略增强版'
+
     # 是否在调试模式下
     g.indebug = False
     # 在线状态响应码
@@ -102,10 +106,20 @@ def initialize(context):# 参数版本号
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
-    
+
+    g.zs1 =  '000016.XSHG' #上证50指数
+    g.zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
+    g.zs8 =  '399005.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
+
+    g.lag = 20 # 回看前20天
+
     g.ret1 = 0
     g.ret2 = 0
     g.ret8 = 0
+    g.ret_last5d = []
+    g.gradient1 = 0
+    g.gradient2 = 0
+    g.gradient8 = 0
 
     # 对比标的
     set_benchmark('000300.XSHG') 
@@ -149,6 +163,7 @@ def initialize(context):# 参数版本号
 
 def log_param():
     log.info("---------------------------------------------")
+    log.info("策略名称: %s" %(g.policy_name))
     log.info("是否是调试模式: %s" %(g.indebug))
     log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
@@ -431,15 +446,10 @@ def handle_data(context, data):
     hour = context.current_dt.hour
     minute = context.current_dt.minute
 
-    zs1 =  '000016.XSHG' #上证50指数
-    zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
-    zs8 =  '159902.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
-    if context.current_dt>datetime.datetime(2008,7, 28):
-        zs8 =  '399005.XSHE'
+    if context.current_dt <= datetime.datetime(2008, 7, 28):
+        g.zs8 =  '159902.XSHE'
 
-    lag = 20 # 回看前20天
-
-#    if isThreeBlackCrows(zs2, data) and isThreeBlackCrows(zs8, data):
+#    if isThreeBlackCrows(g.zs2, data) and isThreeBlackCrows(g.zs8, data):
 #        for stock in g.stocks:
 #            if context.portfolio.positions[stock].sellable_amount > 0:
 #                #有仓位就清仓
@@ -507,12 +517,12 @@ def handle_data(context, data):
     # 有仓位、调仓时间或实盘时检查二八指标
     if (context.portfolio.positions_value > 0) or pos_adjust_time or g.real_market_simulate:
         # 获取超大盘指数均线
-        hs1 = getStockPrice(zs1, lag)
-        hs2 = getStockPrice(zs2, lag)
-        hs8 = getStockPrice(zs8, lag)
-        cp1 = data[zs1].close
-        cp2 = data[zs2].close
-        cp8 = data[zs8].close
+        hs1 = getStockPrice(g.zs1, g.lag)
+        hs2 = getStockPrice(g.zs2, g.lag)
+        hs8 = getStockPrice(g.zs8, g.lag)
+        cp1 = data[g.zs1].close
+        cp2 = data[g.zs2].close
+        cp8 = data[g.zs8].close
 
         cmp1result = True
         cmp2result = True
@@ -540,7 +550,7 @@ def handle_data(context, data):
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0 :
-        if (cmp2result and cmp8result) or (isStockBearish(zs2, data, 5, 0.04, 0.03) or isStockBearish(zs8, data, 5, 0.04, 0.03)) :
+        if (cmp2result and cmp8result) or (isStockBearish(g.zs2, data, 5, 0.04, 0.03) or isStockBearish(g.zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
             log.info('二八未满足条件，清仓')
             sell_all_stocks(context)
@@ -548,10 +558,10 @@ def handle_data(context, data):
             g.days = 2
 
 #    if (minute%30 == 0) :
-#        hs2 = getStockPrice(zs2, lag)
-#        hs8 = getStockPrice(zs8, lag)
-#        cp2 = data[zs2].close
-#        cp8 = data[zs8].close
+#        hs2 = getStockPrice(g.zs2, g.lag)
+#        hs8 = getStockPrice(g.zs8, g.lag)
+#        cp2 = data[g.zs2].close
+#        cp8 = data[g.zs8].close
 
 #        if (not isnan(hs2)) and (not isnan(cp2)):
 #            ret2 = (cp2 - hs2) / hs2;
@@ -577,8 +587,19 @@ def handle_data(context, data):
 
     # 每天下午14:50调仓
     if pos_adjust_time:
+        #log.error("%s" % (str(g.ret_last5d)))
+        #log.error("%f, %f, %f" %(g.ret1, g.ret2, g.ret8))
+        if context.current_dt >= datetime.datetime(2006, 10, 10) and len(g.ret_last5d) >= 5:
+            g.gradient1 = g.ret1 - g.ret_last5d[0][0]
+            g.gradient2 = g.ret2 - g.ret_last5d[0][1]
+            g.gradient8 = g.ret8 - g.ret_last5d[0][2]
+
+            #if g.gradient1 <= -0.01 and g.gradient2 <= -0.01 and g.gradient8 <= -0.01:
+            #    log.error("所有指数向下趋势，减仓")
+
         #奇怪，低于101%时清仓，回测效果出奇得好。
-        if g.ret1>0.01 or g.ret8>0.01 :
+        #超大盘指数只有在5日上涨斜率向上的情况下，满足101%涨幅时允许买入
+        if (g.ret1>0.01 and g.gradient1>0.01) or g.ret2>0.01 or g.ret8>0.01 :
             g.days += 1
             if todobuy or (g.days % g.period == 1):            
                 log.info('持有，每3天进行调仓')
@@ -634,7 +655,7 @@ def order_target_value_(context, security, value):
         secname = curr_data[order.security].name
         if g.autotrader_inform_enabled:
             # inform auto trader to do the trade
-            autotrader_stock_trade('小市值策略改进版', order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
+            autotrader_stock_trade(g.policy_name, order.security, secname, posInPercent, order.price, tradedatetime, order.order_id)
             if g.online_response_code == 0:
                 rspcode = do_record_offline()
                 if rspcode != g.online_response_code:
@@ -768,15 +789,21 @@ def before_trading_start(context):
     
     g.stopstocks = 0
 
-    g.ret1 = 0
-    g.ret2 = 0
-    g.ret8 = 0
-
 #================================================================================
 #每天收盘后
 #================================================================================
 def after_trading_end(context):
     g.trade_stat.report(context)
+
+    while len(g.ret_last5d) >= 5:
+        g.ret_last5d.pop()
+    g.ret_last5d.insert(0, (g.ret1, g.ret2, g.ret8))
+    g.ret1 = 0
+    g.ret2 = 0
+    g.ret8 = 0
+    g.gradient1 = 0
+    g.gradient2 = 0
+    g.gradient8 = 0
 
     # 模拟实盘情况下执行
     if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
