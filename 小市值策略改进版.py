@@ -109,7 +109,7 @@ def initialize(context):# 参数版本号
 
     g.zs1 =  '000016.XSHG' #上证50指数
     g.zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
-    g.zs8 =  '399005.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
+    g.zs8 =  '399101.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
 
     g.lag = 20 # 回看前20天
 
@@ -446,9 +446,6 @@ def handle_data(context, data):
     # 获得当前时间
     hour = context.current_dt.hour
     minute = context.current_dt.minute
-
-    if context.current_dt <= datetime.datetime(2008, 7, 28):
-        g.zs8 =  '159902.XSHE'
 
 #    if isThreeBlackCrows(g.zs2, data) and isThreeBlackCrows(g.zs8, data):
 #        for stock in g.stocks:
