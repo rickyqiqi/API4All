@@ -64,6 +64,8 @@ def get_variables_updated(addstring):
                     g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
                 if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType:
                     g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
+                if content.has_key('g.stock_appointed') and type(content["g.stock_appointed"]) == types.ListType:
+                    g.stock_appointed = content["g.stock_appointed"]
                 if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType:
                     g.stock_candidates = content["g.stock_candidates"]
                 if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType:
@@ -151,13 +153,17 @@ def initialize(context):# 参数版本号
     # 配置是否开启autotrader通知
     g.autotrader_inform_enabled = False
 
+    # 指定股票列表
+    # "510050.XSHG" - 华夏上证50ETF
+    # "160706.XSHE" - 嘉实沪深300ETF联接LOF
+    # "159902.XSHE" - 华夏中小板ETF
+    g.stock_appointed = []
     # 备选股票池，空表示所有股票备选
     g.stock_candidates = []
     # 是否使用指数池选股配置
-    g.index_stock_2_select = True
-    if g.index_stock_2_select:
-        # 指数池，默认上证50指数
-        g.index_pool = ["000016.XSHG"]
+    g.index_stock_2_select = False
+    # 指数池，默认上证50指数
+    g.index_pool = ["000016.XSHG"]
 
     # 打印策略参数
     log_param()
@@ -173,10 +179,14 @@ def log_param():
     log.info("买入股票数目: %d" %(g.stockCount))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
 
-    log.info("备选股票池: %s" %(str(g.stock_candidates)))
-    log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
-    if g.index_stock_2_select:
-        log.info("指数池: %s" %(str(g.index_pool)))
+    if len(g.stock_appointed) > 0:
+        log.info("指定股票列表: %s" %(str(g.stock_appointed)))
+    else:
+        log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
+        if g.index_stock_2_select:
+            log.info("指数池: %s" %(str(g.index_pool)))
+        else:
+            log.info("备选股票池: %s" %(str(g.stock_candidates)))
     log.info("---------------------------------------------")
 
 def getStockPrice(stock, interval):
@@ -285,6 +295,10 @@ def Multi_Select_Stocks(context, data):
             g.exceptions.remove(dstock)
         elif (dstock['targetvalue'] != 0.0) and ((data[dstock['stock']].close-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
             g.exceptions.remove(dstock)
+
+    # 指定股票列表非空，则直接返回指定股票列表
+    if len(g.stock_appointed) > 0:
+        return g.stock_appointed
 
     # 获取备选股票
     stocks = []
