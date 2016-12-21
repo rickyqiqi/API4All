@@ -60,6 +60,8 @@ def get_variables_updated(addstring):
                     g.indebug = content["g.indebug"]
                 if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType:
                     g.stockCount = content["g.stockCount"]
+                if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType:
+                    g.recommend_freq = content["g.recommend_freq"]
                 if content.has_key('g.rank_stock_score_plus_allowed') and type(content["g.rank_stock_score_plus_allowed"]) == types.BooleanType:
                     g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
                 if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType:
@@ -137,7 +139,8 @@ def initialize(context):# 参数版本号
     g.stockscrashed = []
     g.stopstocks = []
     #g.maxvalue = {} # 购买之后的最高价列表
-    #g.stockrecommend = []
+    g.stockrecommend = []
+    g.recommend_freq = 5
     # 股票多头趋势加分项参数
     g.rank_stock_score_plus_allowed = True
     if g.rank_stock_score_plus_allowed:
@@ -162,8 +165,11 @@ def initialize(context):# 参数版本号
     g.stock_candidates = []
     # 是否使用指数池选股配置
     g.index_stock_2_select = False
-    # 指数池，默认上证50指数
-    g.index_pool = ["000016.XSHG"]
+    # 指数池
+    # '000016.XSHG' - 上证50指数
+    # '000300.XSHG' - 沪深300指数
+    # '399005.XSHE' - 中小板指数
+    g.index_pool = []
 
     # 打印策略参数
     log_param()
@@ -177,6 +183,7 @@ def log_param():
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
 
     log.info("买入股票数目: %d" %(g.stockCount))
+    log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
 
     if len(g.stock_appointed) > 0:
@@ -574,33 +581,19 @@ def handle_data(context, data):
             # 修整1天，设置为2，避免当天再次买入股票
             g.days = 2
 
-#    if (minute%30 == 0) :
-#        hs2 = getStockPrice(g.zs2, g.lag)
-#        hs8 = getStockPrice(g.zs8, g.lag)
-#        cp2 = data[g.zs2].close
-#        cp8 = data[g.zs8].close
-
-#        if (not isnan(hs2)) and (not isnan(cp2)):
-#            ret2 = (cp2 - hs2) / hs2;
-#        else:
-#            ret2 = 0
-#        if (not isnan(hs8)) and (not isnan(cp8)):
-#            ret8 = (cp8 - hs8) / hs8;
-#        else:
-#            ret8 = 0
-        #log.info('%03f, %03f' %(ret2,ret8))
-        
-        #奇怪，低于101%时清仓，回测效果出奇得好。
-#        if ret2>0.01 or ret8>0.01 :  
-#            stockrecommend = Multi_Select_Stocks(context, data)
-#            stockrecommend.sort()
-#            if cmp(g.stockrecommend, stockrecommend) != 0 :
-#                g.stockrecommend = stockrecommend
-#                log.info('推荐股票')
-#                log.info('%s' %(str(g.stockrecommend)))
-#        elif g.stockrecommend != []:
-#            g.stockrecommend = []
-#            log.info('不推荐买入股票')
+    # 推荐股票
+    if (minute % g.recommend_freq == 0) :
+        if (g.real_market_simulate or g.indebug) :  
+            stockrecommend = Multi_Select_Stocks(context, data)
+            stockrecommend.sort()
+            if cmp(g.stockrecommend, stockrecommend) != 0 :
+                g.stockrecommend = stockrecommend
+                output = ''
+                curr_data = get_current_data()
+                for stock in g.stockrecommend:
+                    output += '%s(%s), ' % (curr_data[stock].name, stock)
+                output = output[:-2]
+                log.info('当前推荐股票：%s' %(output))
 
     # 每天下午14:50调仓
     if pos_adjust_time:
