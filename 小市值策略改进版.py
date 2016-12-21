@@ -33,12 +33,11 @@ from sqlalchemy import desc
 import numpy as np
 import pandas as pd
 from scipy import stats
-import tradestat
 from autotraderintf import *
 from mailintf import *
 
 # 获取配置值
-def get_variables_updated(addstring):
+def get_variables_updated(context, addstring):
     # 配置值文件
     if g.real_market_simulate:
         configfilename = 'config/real_%s.conf' %(addstring)
@@ -56,6 +55,12 @@ def get_variables_updated(addstring):
                 # 需更新的数值写在这
                 if content.has_key('g.policy_name' ) and type(content["g.policy_name"]) == types.UnicodeType:
                     g.policy_name = content["g.policy_name"]
+                if content.has_key('g.capitalValue') and type(content["g.capitalValue"]) == types.IntType:
+                    # 回测或模拟盘设置阶段设置的初始总金额 - 本金总金额 = 利润
+                    currentProfit = (context.portfolio.total_value - g.totalValueDifference) - g.capitalValue
+                    g.capitalValue = content["g.capitalValue"]
+                    # 金额总差值 = 当前总值 - 新本金总金额 - 之前的利润
+                    g.totalValueDifference = context.portfolio.total_value - g.capitalValue - currentProfit
                 if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType:
                     g.indebug = content["g.indebug"]
                 if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType:
@@ -90,6 +95,11 @@ def initialize(context):# 参数版本号
 
     g.policy_name = '小市值策略增强版'
 
+    # 初始总金额或调整后总金额
+    g.capitalValue = 50000
+    # 金额总差值 = 当前总值 - 新本金总金额 - 之前的利润(0)
+    g.totalValueDifference = context.portfolio.total_value - g.capitalValue
+
     # 是否在调试模式下
     g.indebug = False
     # 在线状态响应码
@@ -109,7 +119,7 @@ def initialize(context):# 参数版本号
         g.real_market_simulate = True
 
     # 加载统计模块
-    g.trade_stat = tradestat.trade_stat()
+    g.trade_stat = trade_stat()
 
     g.zs1 =  '000016.XSHG' #上证50指数
     g.zs2 =  '000300.XSHG' #'000300.XSHG' #沪深300指数
@@ -181,7 +191,7 @@ def log_param():
     log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
-
+    log.info("初始总金额或调整后总金额: %d" %(g.capitalValue))
     log.info("买入股票数目: %d" %(g.stockCount))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
@@ -660,7 +670,7 @@ def order_target_value_(context, security, value):
     # 模拟式盘情况下，订单非空
     if (g.real_market_simulate or g.indebug) and order != None:
         tradedatetime = context.current_dt
-        posInPercent = value/context.portfolio.total_value
+        posInPercent = value / (context.portfolio.total_value - g.totalValueDifference)
         curr_data = get_current_data()
         secname = curr_data[order.security].name
         if g.autotrader_inform_enabled:
@@ -719,7 +729,7 @@ def buy_stocks(context, data):
     # place equally weighted orders
     #已有股票数量>=4个，则直接返回
     if valid_count < len(g.stocks):
-        value = context.portfolio.total_value / len(g.stocks)
+        value = (context.portfolio.total_value - g.totalValueDifference) / len(g.stocks)
         for stock in g.stocks:
             open_position(context, stock, value)
             curr_data = get_current_data()
@@ -760,7 +770,7 @@ def update_maxr_bstd(context):
 #================================================================================
 def before_trading_start(context):
     # 检查变量是否在文件中更新
-    if get_variables_updated(g.addstring):
+    if get_variables_updated(context, g.addstring):
         # 打印策略参数
         log_param()
 
@@ -826,3 +836,94 @@ def after_trading_end(context):
     for _order in orders.values():
         log.info("canceled uncompleted order: %s" %(_order.order_id))
     pass
+
+# 交易统计类
+class trade_stat():
+    def __init__(self):
+        self.trade_total_count = 0
+        self.trade_success_count = 0
+        self.statis = {'win': [], 'loss': []}
+        
+    def reset(self):
+        self.trade_total_count = 0
+        self.trade_success_count = 0
+        self.statis = {'win': [], 'loss': []}
+    
+    # 记录交易次数便于统计胜率
+    # 卖出成功后针对卖出的量进行盈亏统计
+    def watch(self, stock, sold_amount, avg_cost, cur_price):
+        self.trade_total_count += 1
+        current_value = sold_amount * cur_price
+        cost = sold_amount * avg_cost
+
+        percent = round((current_value - cost) / cost * 100, 2)
+        if current_value > cost:
+            self.trade_success_count += 1
+            win = [stock, percent]
+            self.statis['win'].append(win)
+        else:
+            loss = [stock, percent]
+            self.statis['loss'].append(loss)
+        
+    def report(self, context):
+        cash = context.portfolio.cash - g.totalValueDifference
+        totol_value = context.portfolio.total_value - g.totalValueDifference
+        position = 1 - cash/totol_value
+        log.info("收盘后持仓概况:%s" % str(list(context.portfolio.positions)))
+        log.info("仓位概况:%.2f" % position)
+        self.print_win_rate(context.current_dt.strftime("%Y-%m-%d"), context.current_dt.strftime("%Y-%m-%d"), context)
+
+    # 打印胜率
+    def print_win_rate(self, current_date, print_date, context):
+        if str(current_date) == str(print_date):
+            win_rate = 0
+            if 0 < self.trade_total_count and 0 < self.trade_success_count:
+                win_rate = round(self.trade_success_count / float(self.trade_total_count), 3)
+
+            most_win = self.statis_most_win_percent()
+            most_loss = self.statis_most_loss_percent()
+            starting_cash = g.capitalValue
+            total_profit = self.statis_total_profit(context)
+            if len(most_win)==0 or len(most_loss)==0:
+                return
+
+            print "-"
+            print '------------绩效报表------------'
+            print '交易次数: {0}, 盈利次数: {1}, 胜率: {2}'.format(self.trade_total_count, self.trade_success_count, str(win_rate * 100) + str('%'))
+            print '单次盈利最高: {0}, 盈利比例: {1}%'.format(most_win['stock'], most_win['value'])
+            print '单次亏损最高: {0}, 亏损比例: {1}%'.format(most_loss['stock'], most_loss['value'])
+            print '总资产: {0}, 本金: {1}, 盈利: {2}, 盈亏比率：{3}%'.format(starting_cash + total_profit, starting_cash, total_profit, total_profit / starting_cash * 100)
+            print '--------------------------------'
+            print "-"
+
+    # 统计单次盈利最高的股票
+    def statis_most_win_percent(self):
+        result = {}
+        for statis in self.statis['win']:
+            if {} == result:
+                result['stock'] = statis[0]
+                result['value'] = statis[1]
+            else:
+                if statis[1] > result['value']:
+                    result['stock'] = statis[0]
+                    result['value'] = statis[1]
+
+        return result
+
+    # 统计单次亏损最高的股票
+    def statis_most_loss_percent(self):
+        result = {}
+        for statis in self.statis['loss']:
+            if {} == result:
+                result['stock'] = statis[0]
+                result['value'] = statis[1]
+            else:
+                if statis[1] < result['value']:
+                    result['stock'] = statis[0]
+                    result['value'] = statis[1]
+
+        return result
+
+    # 统计总盈利金额    
+    def statis_total_profit(self, context):
+        return (context.portfolio.total_value - g.totalValueDifference) - g.capitalValue
