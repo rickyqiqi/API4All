@@ -38,6 +38,7 @@ from mailintf import *
 
 # 获取配置值
 def get_variables_updated(context, addstring):
+    valueUpdated = False
     # 配置值文件
     if g.real_market_simulate:
         configfilename = 'config/real_%s.conf' %(addstring)
@@ -48,50 +49,66 @@ def get_variables_updated(context, addstring):
         jsoncontent = read_file(configfilename)
         content = json.loads(jsoncontent)
 
-        if content.has_key('version') and type(content["version"]) == types.FloatType:
-            version = content["version"]
-            # 更新初始化函数里的赋值
-            if version > g.version:
-                # 需更新的数值写在这
-                if content.has_key('g.policy_name' ) and type(content["g.policy_name"]) == types.UnicodeType:
-                    g.policy_name = content["g.policy_name"]
-                if content.has_key('g.capitalValue') and type(content["g.capitalValue"]) == types.IntType:
-                    # 回测或模拟盘设置阶段设置的初始总金额 - 本金总金额 = 利润
-                    currentProfit = (context.portfolio.total_value - g.totalValueDifference) - g.capitalValue
-                    g.capitalValue = content["g.capitalValue"]
-                    # 金额总差值 = 当前总值 - 新本金总金额 - 之前的利润
-                    g.totalValueDifference = context.portfolio.total_value - g.capitalValue - currentProfit
-                if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType:
-                    g.indebug = content["g.indebug"]
-                if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType:
-                    g.stockCount = content["g.stockCount"]
-                if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType:
-                    g.recommend_freq = content["g.recommend_freq"]
-                if content.has_key('g.rank_stock_score_plus_allowed') and type(content["g.rank_stock_score_plus_allowed"]) == types.BooleanType:
-                    g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
-                if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType:
-                    g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
-                if content.has_key('g.stock_appointed') and type(content["g.stock_appointed"]) == types.ListType:
-                    g.stock_appointed = content["g.stock_appointed"]
-                if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType:
-                    g.stock_candidates = content["g.stock_candidates"]
-                if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType:
-                    g.index_stock_2_select = content["g.index_stock_2_select"]
-                if content.has_key('g.index_pool') and type(content["g.index_pool"]) == types.ListType:
-                    g.index_pool = content["g.index_pool"]
+        # 需更新的数值写在这
+        if content.has_key('g.policy_name' ) and type(content["g.policy_name"]) == types.UnicodeType \
+            and g.policy_name != content["g.policy_name"]:
+            g.policy_name = content["g.policy_name"]
+            valueUpdated = True
+        if content.has_key('g.capitalValue') and type(content["g.capitalValue"]) == types.IntType \
+            and g.capitalValue != content["g.capitalValue"]:
+            # 回测或模拟盘设置阶段设置的初始总金额 - 本金总金额 = 利润
+            currentProfit = (context.portfolio.total_value - g.totalValueDifference) - g.capitalValue
+            g.capitalValue = content["g.capitalValue"]
+            valueUpdated = True
+            # 金额总差值 = 当前总值 - 新本金总金额 - 之前的利润
+            g.totalValueDifference = context.portfolio.total_value - g.capitalValue - currentProfit
+        if content.has_key('g.indebug' ) and type(content["g.indebug"]) == types.BooleanType \
+            and g.indebug != content["g.indebug"]:
+            g.indebug = content["g.indebug"]
+            valueUpdated = True
+        if content.has_key('g.stockCount') and type(content["g.stockCount"]) == types.IntType \
+            and g.stockCount != content["g.stockCount"]:
+            g.stockCount = content["g.stockCount"]
+            valueUpdated = True
+        if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType \
+            and g.recommend_freq != content["g.recommend_freq"]:
+            g.recommend_freq = content["g.recommend_freq"]
+            valueUpdated = True
+        if content.has_key('g.rank_stock_score_plus_allowed') and type(content["g.rank_stock_score_plus_allowed"]) == types.BooleanType \
+            and g.rank_stock_score_plus_allowed != content["g.rank_stock_score_plus_allowed"]:
+            g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
+            valueUpdated = True
+        if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType \
+            and g.autotrader_inform_enabled != content["g.autotrader_inform_enabled"]:
+            g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
+            valueUpdated = True
+        if content.has_key('g.stock_appointed') and type(content["g.stock_appointed"]) == types.ListType \
+            and g.stock_appointed != content["g.stock_appointed"]:
+            g.stock_appointed = content["g.stock_appointed"]
+            valueUpdated = True
+        if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType \
+            and g.stock_candidates != content["g.stock_candidates"]:
+            g.stock_candidates = content["g.stock_candidates"]
+            valueUpdated = True
+        if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType \
+            and g.index_stock_2_select != content["g.index_stock_2_select"]:
+            g.index_stock_2_select = content["g.index_stock_2_select"]
+            valueUpdated = True
+        if content.has_key('g.index_pool') and type(content["g.index_pool"]) == types.ListType \
+            and g.index_pool != content["g.index_pool"]:
+            g.index_pool = content["g.index_pool"]
+            valueUpdated = True
 
-                g.version = version
-                return True
     except:
         log.error("配置文件%s读取错误" %(configfilename))
 
-    return False
+    return valueUpdated
 
 def initialize(context):# 参数版本号
     g.version = 0.0
 
     # additional string in variable configuration file name
-    g.addstring = "smallshare001"
+    g.addstring = "small4stocks"
 
     g.policy_name = '小市值策略增强版'
 
@@ -194,6 +211,7 @@ def log_param():
     log.info("初始总金额或调整后总金额: %d" %(g.capitalValue))
     log.info("买入股票数目: %d" %(g.stockCount))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
+    log.info("是否开启股票多头趋势加分: %s" %(g.rank_stock_score_plus_allowed))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
 
     if len(g.stock_appointed) > 0:
@@ -462,6 +480,11 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
 
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
+    # 检查变量是否在文件中更新
+    if g.real_market_simulate and get_variables_updated(context, g.addstring):
+        # 打印策略参数
+        log_param()
+
     if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
         # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
         if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
