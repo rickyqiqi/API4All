@@ -105,8 +105,6 @@ def get_variables_updated(context, addstring):
     return valueUpdated
 
 def initialize(context):# 参数版本号
-    g.version = 0.0
-
     # additional string in variable configuration file name
     g.addstring = "small4stocks"
 
@@ -205,7 +203,6 @@ def log_param():
     log.info("---------------------------------------------")
     log.info("策略名称: %s" %(g.policy_name))
     log.info("是否是调试模式: %s" %(g.indebug))
-    log.info("参数版本号: %.02f" %(g.version))
     log.info("调仓日频率: %d日" %(g.period))
     log.info("调仓时间: %s:%s" %(g.adjust_position_hour, g.adjust_position_minute))
     log.info("初始总金额或调整后总金额: %d" %(g.capitalValue))
