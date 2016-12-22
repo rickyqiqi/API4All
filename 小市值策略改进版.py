@@ -336,19 +336,19 @@ def Multi_Select_Stocks(context, data):
     stocks = []
     # 是否使用指数池选股配置
     if g.index_stock_2_select:
-        log.info("指数股票池：%s" %(str(g.index_pool)))
+        #log.info("指数股票池：%s" %(str(g.index_pool)))
         # 指数池
         for index in g.index_pool:
             stocks += get_index_stocks(index)
     else:
         # 备选股票池，空表示所有股票备选
         if len(g.stock_candidates) == 0:
-            log.info("所有股票池")
+            #log.info("所有股票池")
             candidates = get_all_securities(['stock'])
             #排除新股
             stocks = candidates[(context.current_dt.date() - candidates.start_date) > datetime.timedelta(60)].index
         else:
-            log.info("备选股票池: %s" %(str(g.stock_candidates)))
+            #log.info("备选股票池: %s" %(str(g.stock_candidates)))
             stocks = g.stock_candidates
 
     #stocks  = stocks.index
