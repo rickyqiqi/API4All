@@ -16,6 +16,9 @@ from flask import request
 import logging
 import logging.config
 from pysqlcipher3 import dbapi2 as sqlite
+import base64
+from Crypto import Random
+from Crypto.Cipher import AES
 
 app = Flask(__name__)
 
@@ -152,12 +155,36 @@ def stocktrade():
                 if requesttime != currenttime:
                     logger.warning('Server time is different - request: %d, local: %d' %(requesttime, currenttime))
 
-                accountpasswds = {"19780112": "W2Qa9~wc01]lk>3,@jq"}
+                passwd = []
+                try:
+                    # 连接到SQLite数据库
+                    conn = sqlite.connect('/var/www/autotrader/sqlite3/orders.db')
+                    # 创建一个Cursor
+                    cursor = conn.cursor()
+                    # 秘钥
+                    cursor.execute("pragma key='autotrader@8'")
+                    # 执行账户表查询语句
+                    cursor.execute('select Password from accounts where UserID=? and ServerAccount=1', (json_decode["accountNo"],))
+                    passwd = [list(item)[0] for item in cursor.fetchall()]
+
+                    cursor.close()
+                    conn.close()
+                except:
+                    logger.error("订单数据库读取失败")
+
                 # check if the account NO. is valid
-                if json_decode["accountNo"] in accountpasswds.keys():
+                if len(passwd) > 0:
+                    key = b'Auto]8[Trader]@3'
+                    iv = b'@Trader[9t1]Auto'
+                    cipher = AES.new(key, AES.MODE_CBC, iv)
+                    cipher_password64 = (passwd[0]).encode('utf-8')
+                    cipher_password = base64.decodestring(cipher_password64)
+                    password = cipher.decrypt(cipher_password)
+                    password = password.strip(b'\0')
+                    password = password.decode('utf-8')
                     # calculate the md5 value
                     m2 = hashlib.md5()
-                    plainpasswd = str(json_decode["timestamp"]) + str(json_decode["rand"]) + accountpasswds[json_decode["accountNo"]]
+                    plainpasswd = str(json_decode["timestamp"]) + str(json_decode["rand"]) + str(password)
                     m2.update(plainpasswd)
                     if json_decode["password"] == m2.hexdigest():
                         if json_decode["marketCode"] == "cn":

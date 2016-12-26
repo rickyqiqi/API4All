@@ -98,7 +98,7 @@ def changePassword(dbFile):
             cursor = conn.cursor()
             # 秘钥
             cursor.execute("pragma key='autotrader@8'")
-            cursor.execute('update accounts set password=? where UserID=? and Password=? and Name=? and PhoneNO=? and ServerAccount=?', (cipher_password64.decode('utf-8'), UserID[selection], passwd[selection], Name[selection], PhoneNO[selection], ServerAccount[selection]))
+            cursor.execute('update accounts set Password=? where UserID=? and Password=? and Name=? and PhoneNO=? and ServerAccount=?', (cipher_password64.decode('utf-8'), UserID[selection], passwd[selection], Name[selection], PhoneNO[selection], ServerAccount[selection]))
 
             cursor.close()
             conn.commit()
