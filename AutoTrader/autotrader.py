@@ -191,8 +191,8 @@ def stocktrade():
                             ret = True
                             logger.debug("%s - To set stock %s (%s) to value %.4f, recommended price: %.2f, orderID: %d" \
                                   %(json_decode["policyName"], json_decode["secname"], json_decode["security"], json_decode["value"]*100, json_decode["price"], json_decode["orderId"]))
-                            # mail information to database
-                            mail_to_db(json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"])
+                            # data information to database
+                            data_to_db(json_decode["policyName"], json_decode["security"], json_decode["secname"], json_decode["value"], json_decode["price"], json_decode["txnTime"], json_decode["orderId"], json_decode["marketCode"], json_decode["accountNo"])
                             # check if mail sender process in running, if not start it
                             cmd_line = 'python /var/www/autotrader/mailsender/mailsender.py'
                             cmd_output = os.popen("pgrep -f \'%s\'" % (cmd_line)).read()
@@ -229,7 +229,23 @@ def stocktrade():
     telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
     return json_response
 
-def mail_to_db(policyname, security, secname, value, price, tradedatetime):
+def data_to_db(policyname, security, secname, value, price, tradedatetime, orderId, marketCode, accountNo):
+    try:
+        # 连接到SQLite数据库
+        conn = sqlite.connect('/var/www/autotrader/sqlite3/orders.db')
+        # 创建一个Cursor
+        cursor = conn.cursor()
+        # 秘钥
+        cursor.execute("pragma key='autotrader@8'")
+        # 更新订单表
+        cursor.execute('insert into orders (tradeTime, policyName, security, secname, positions, price, orderId, marketCode, accountNo) values (?, ?, ?, ?, ?, ?, ?, ?, ?)', (tradedatetime, policyname, security, secname, value, price, orderId, marketCode, accountNo))
+
+        cursor.close()
+        conn.commit()
+        conn.close()
+    except:
+        logger.error("订单数据库操作失败")
+
     try:
         # 连接到SQLite数据库
         conn = sqlite.connect('/var/www/autotrader/sqlite3/mailtoclients.db')
