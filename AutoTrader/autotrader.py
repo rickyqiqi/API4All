@@ -240,6 +240,16 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
         # 更新订单表
         cursor.execute('insert into orders (tradeTime, policyName, security, secname, positions, price, orderId, marketCode, accountNo) values (?, ?, ?, ?, ?, ?, ?, ?, ?)', (tradedatetime, policyname, security, secname, value, price, orderId, marketCode, accountNo))
 
+        # 查询对应策略的视图是否已经存在
+        viewName = policyname + '_' + accountNo + '_' + marketCode
+        cursor.execute("select count(*) from sqlite_master where type='view' and name=?", (viewName,))
+        count = cursor.fetchone()[0]
+        if count != 0:
+            sqlcmd = "drop view %s" % (viewName)
+            cursor.execute(sqlcmd)
+        sqlcmd = "create view %s as select secname, security, positions, price from orders" % (viewName)
+        cursor.execute(sqlcmd)
+
         cursor.close()
         conn.commit()
         conn.close()
