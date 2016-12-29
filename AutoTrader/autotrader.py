@@ -162,9 +162,9 @@ def stocktrade():
                     # 创建一个Cursor
                     cursor = conn.cursor()
                     # 秘钥
-                    cursor.execute("pragma key='autotrader@8'")
+                    cursor.execute("PRAGMA KEY='autotrader@8'")
                     # 执行账户表查询语句
-                    cursor.execute('select Password from accounts where UserID=? and ServerAccount=1', (json_decode["accountNo"],))
+                    cursor.execute('SELECT Password FROM accounts WHERE UserID=? AND ServerAccount=1', (json_decode["accountNo"],))
                     passwd = [list(item)[0] for item in cursor.fetchall()]
 
                     cursor.close()
@@ -236,20 +236,26 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
         # 创建一个Cursor
         cursor = conn.cursor()
         # 秘钥
-        cursor.execute("pragma key='autotrader@8'")
+        cursor.execute("PRAGMA KEY='autotrader@8'")
         # 更新订单表
-        cursor.execute('insert into orders (tradeTime, policyName, security, secname, positions, price, orderId, marketCode, accountNo) values (?, ?, ?, ?, ?, ?, ?, ?, ?)', (tradedatetime, policyname, security, secname, value, price, orderId, marketCode, accountNo))
+        cursor.execute('INSERT INTO orders (tradeTime, policyName, security, secname, positions, price, orderId, marketCode, accountNo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (tradedatetime, policyname, security, secname, value, price, orderId, marketCode, accountNo))
 
-        # 查询对应策略的视图是否已经存在
+        # 查询对应策略的表是否已经存在，如果股票持仓表存在就删除并重新生成
         viewName = policyname + '_' + accountNo + '_' + marketCode
-        cursor.execute("select count(*) from sqlite_master where type='view' and name=?", (viewName,))
-        count = cursor.fetchone()[0]
-        if count != 0:
-            sqlcmd = "drop view %s" % (viewName)
-            cursor.execute(sqlcmd)
-        sqlcmd = "create view %s as select secname, security, positions, price from orders" % (viewName)
+        sqlcmd = "DROP TABLE IF EXISTS %s" % (viewName)
         cursor.execute(sqlcmd)
-
+        sqlcmd = "CREATE TABLE %s (secname TEXT, security TEXT, positions FLOAT, price FLOAT)" % (viewName)
+        cursor.execute(sqlcmd)
+        # 获取所有该策略持仓过的股票列表
+        cursor.execute("SELECT security FROM orders WHERE policyName=? AND accountNo=? AND marketCode=? GROUP BY security", (policyname, accountNo, marketCode,))
+        securitylist = [list(item)[0] for item in cursor.fetchall()]
+        for i in range(len(securitylist)):
+            # 找出相应股票的最新一次订单
+            cursor.execute("SELECT secname, security, positions, price FROM orders WHERE security=? AND policyName=? AND accountNo=? AND marketCode=? ORDER BY tradeTime DESC LIMIT 0,1", (securitylist[i], policyname, accountNo, marketCode,))
+            line1st = cursor.fetchone()
+            if line1st[2] > 0:
+                sqlcmd = "INSERT INTO %s (secname, security, positions, price) VALUES (?, ?, ?, ?)" % (viewName)
+                cursor.execute(sqlcmd, (line1st[0], line1st[1], line1st[2], line1st[3]))
         cursor.close()
         conn.commit()
         conn.close()
@@ -262,12 +268,12 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
         # 创建一个Cursor
         cursor = conn.cursor()
         # 秘钥
-        cursor.execute("pragma key='autotrader@8'")
+        cursor.execute("PRAGMA KEY='autotrader@8'")
         # 查询收件人表数据结构
-        cursor.execute('pragma table_info(receivers)')
+        cursor.execute('PRAGMA table_info(receivers)')
         receiversstruct = [list(item)[1] for item in cursor.fetchall()]
         # 执行收件人表查询语句
-        cursor.execute('select * from receivers where enabled=?', ('1',))
+        cursor.execute('SELECT * FROM receivers WHERE enabled=?', ('1',))
         receiversdata = cursor.fetchall()
         
         for i in range(len(receiversstruct)):
@@ -282,7 +288,7 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
         # 删除最后一个逗号
         recvstr = recvstr[:-1]
         logger.debug("邮件信息存入客户邮件数据库：%s, %s" % (mail_msg, recvstr))
-        cursor.execute('insert into mails (content, receivers) values (?, ?)', (mail_msg, recvstr))
+        cursor.execute('INSERT INTO mails (content, receivers) VALUES (?, ?)', (mail_msg, recvstr))
 
         cursor.close()
         conn.commit()
