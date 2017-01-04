@@ -241,10 +241,10 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
         cursor.execute('INSERT INTO orders (tradeTime, policyName, security, secname, positions, price, orderId, marketCode, accountNo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (tradedatetime, policyname, security, secname, value, price, orderId, marketCode, accountNo))
 
         # 查询对应策略的表是否已经存在，如果股票持仓表存在就删除并重新生成
-        viewName = policyname + '_' + accountNo + '_' + marketCode
-        sqlcmd = "DROP TABLE IF EXISTS %s" % (viewName)
+        tableName = policyname + '_' + accountNo + '_' + marketCode + '_当前持仓'
+        sqlcmd = "DROP TABLE IF EXISTS %s" % (tableName)
         cursor.execute(sqlcmd)
-        sqlcmd = "CREATE TABLE %s (secname TEXT, security TEXT, positions FLOAT, price FLOAT)" % (viewName)
+        sqlcmd = "CREATE TABLE %s (secname TEXT, security TEXT, positions FLOAT, price FLOAT)" % (tableName)
         cursor.execute(sqlcmd)
         # 获取所有该策略持仓过的股票列表
         cursor.execute("SELECT security FROM orders WHERE policyName=? AND accountNo=? AND marketCode=? GROUP BY security", (policyname, accountNo, marketCode,))
@@ -254,8 +254,18 @@ def data_to_db(policyname, security, secname, value, price, tradedatetime, order
             cursor.execute("SELECT secname, security, positions, price FROM orders WHERE security=? AND policyName=? AND accountNo=? AND marketCode=? ORDER BY tradeTime DESC LIMIT 0,1", (securitylist[i], policyname, accountNo, marketCode,))
             line1st = cursor.fetchone()
             if line1st[2] > 0:
-                sqlcmd = "INSERT INTO %s (secname, security, positions, price) VALUES (?, ?, ?, ?)" % (viewName)
+                sqlcmd = "INSERT INTO %s (secname, security, positions, price) VALUES (?, ?, ?, ?)" % (tableName)
                 cursor.execute(sqlcmd, (line1st[0], line1st[1], line1st[2], line1st[3]))
+        # 找出最新交易日订单
+        #cursor.execute("SELECT tradeTime FROM orders WHERE policyName=? AND accountNo=? AND marketCode=? ORDER BY tradeTime DESC LIMIT 0,1", (policyname, accountNo, marketCode,))
+        #line1st = cursor.fetchone()
+        #lastorderdate = line1st[0][:10]
+        lastorderdate = tradedatetime[:10]
+        tableName = policyname + '_' + accountNo + '_' + marketCode + '_最新下单'
+        sqlcmd = "DROP TABLE IF EXISTS %s" % (tableName)
+        cursor.execute(sqlcmd)
+        sqlcmd = "CREATE TABLE %s AS SELECT tradeTime, secname, security, positions, price FROM orders WHERE policyName=? AND accountNo=? AND marketCode=? AND tradeTime>=?" % (tableName)
+        cursor.execute(sqlcmd, (policyname, accountNo, marketCode, lastorderdate))
         cursor.close()
         conn.commit()
         conn.close()
