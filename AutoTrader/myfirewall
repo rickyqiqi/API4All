@@ -40,6 +40,13 @@ iptables -A OUTPUT -p udp --sport 53 -j ACCEPT
 iptables -A INPUT -p tcp --dport 60443 -m state --state NEW,ESTABLISHED -j ACCEPT
 iptables -A OUTPUT -p tcp --sport 60443 -m state --state ESTABLISHED -j ACCEPT
 #
+# Socket IO port
+#
+#iptables -A INPUT -p tcp --sport 60080 -j ACCEPT
+#iptables -A OUTPUT -p tcp --dport 60080 -j ACCEPT
+iptables -A INPUT -p tcp --dport 60080 -m state --state NEW,ESTABLISHED -j ACCEPT
+iptables -A OUTPUT -p tcp --sport 60080 -m state --state ESTABLISHED -j ACCEPT
+#
 # Save settings
 #
 /sbin/service iptables save
