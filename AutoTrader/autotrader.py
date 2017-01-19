@@ -19,6 +19,7 @@ from pysqlcipher3 import dbapi2 as sqlite
 import base64
 from Crypto import Random
 from Crypto.Cipher import AES
+from redis import Redis
 
 app = Flask(__name__)
 
@@ -28,6 +29,74 @@ sys.setdefaultencoding('utf-8')
 logging.config.fileConfig("/var/www/autotrader/logger.conf")
 logger = logging.getLogger("main")
 telegramlogger = logging.getLogger("telegram")
+
+@app.route('/autotrader/authentiate', methods=['POST'])
+def authentiate():
+    # uncoded response data
+    response_data = {"timestamp": 0, "rand": 0, "txnCode": -1}
+    # request json string is in keys
+    keys = request.form.keys()
+
+    query_str = ""
+    if request.query_string != "":
+        query_str = '/' + str(request.query_string)
+    telegramlogger.info(request.remote_addr + ' ==> ' + request.host + request.path + query_str + ': ' + str(keys))
+    # check if there's only 1 json string key
+    if len(keys) == 1:
+        # get the json request string
+        json_decode = json.loads(keys[0])
+        if not (json_decode.has_key('rand') and type(json_decode["rand"]) == types.IntType):
+            logger.error('JSON key \"rand\" related error')
+            # response with parameters error
+            response_data["txnCode"] = 1
+        elif not (json_decode.has_key('equipId') and type(json_decode["equipId"]) == types.UnicodeType):
+            logger.error('JSON key \"equipId\" related error')
+            # response with parameters error
+            response_data["txnCode"] = 1
+        elif not (json_decode.has_key('encType') and type(json_decode["encType"]) == types.IntType):
+            logger.error('JSON key \"encType\" related error')
+            # response with parameters error
+            response_data["txnCode"] = 1
+        elif not (json_decode.has_key('encKey') and type(json_decode["encKey"]) == types.UnicodeType):
+            logger.error('JSON key \"encKey\" related error')
+            # response with parameters error
+            response_data["txnCode"] = 1
+        else:
+            # check if encrypt algorithm type is ok
+            encType = json_decode['encType']
+            if encType == 0:
+                encKey = json_decode['encKey']
+
+                key = b'Auto]8[Trader]@3'
+                iv = b'@Trader[9t1]Auto'
+                cipher = AES.new(key, AES.MODE_CBC, iv)
+                cipher_enkey64 = (encKey[0]).encode('utf-8')
+                cipher_encKey = base64.decodestring(cipher_enkey64)
+                plainKey = cipher.decrypt(cipher_encKey)
+                plainKey = plainKey.strip(b'\0')
+                plainKey = plainKey.decode('utf-8')
+
+                redis = Redis()
+                pipe = redis.pipeline()
+                pipe.set(json_decode["equipId"], plainKey)
+                pipe.expire(user_key, 7200) # key expired after 2 hours
+                pipe.execute()
+
+                # response with success
+                response_data["txnCode"] = 0
+            else:
+                # response with encrypt algorithm unkown error
+                response_data["txnCode"] = 3
+                logger.error('encrypt algorithm type (%d) unkown' %(encType))
+    else :
+        # response with parameters error
+        response_data["txnCode"] = 1
+
+    response_data["timestamp"] = int(time.time())
+    response_data["rand"] = random.randrange(-2147483647, 2147483647)
+    json_response = json.dumps(response_data)
+    telegramlogger.info(request.host + ' ==> ' + request.remote_addr + ': ' + json_response)
+    return json_response
 
 @app.route('/autotrader/onlinestatus', methods=['POST'])
 def onlinestatus():
