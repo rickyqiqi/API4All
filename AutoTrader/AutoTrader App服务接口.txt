@@ -1,0 +1,101 @@
+服务器认证事件 （APP ===> 服务器）
+URL: https://IP:Port/ServicePath/Authent
+参数：JSON字符串 {"rand": rand, "equipId": equipId, "encType": encType, "encKey": encKey}
+rand 随机数（32位整型数据）
+equipId 设备唯一号
+encType 对称密钥类型（0 – AES CBCPKCS5）
+encKey base64格式对称密钥
+
+服务器认证事件响应事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand,"txnCode": txnCode}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+txnCode 结果标记（0 - 服务器认证成功 1 - 请求参数错误 3 - 加密算法未知 4 - 服务器认证失败）
+
+
+使用Socket IO事件处理机制
+URL: http://IP:Port
+以下所有参数使用服务器认证中的对称秘钥加密
+* 常规事件
+EVENT_CONNECT 连接建立             （APP <===> 服务器）
+EVENT_DISCONNECT 连接断开          （APP <===> 服务器）
+EVENT_CONNECT_ERROR 连接建立失败   （APP ===> 服务器）
+EVENT_CONNECT_TIMEOUT 连接建立超时 （APP ===> 服务器）
+
+* 自定义事件
+"login"  登录事件 （APP ===> 服务器）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "username": username, "password": password}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+username 登录用户名字符串
+password  base64格式密码MD5摘要字符串
+
+"login"  登录事件响应事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "txnCode": txnCode}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+txnCode 结果标记 （0- 设备登录成功 1 - 请求参数错误 2 - 时间戳异常 7 - 账号密码错误 9 - 密钥有效期超时）
+
+"get_policies"  获取策略组合事件 （APP ===> 服务器）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "username": username}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+username 登录用户名字符串
+
+"get_policies"  获取策略组合事件响应事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "policies": [{"policy": policy}]}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+policies 策略组合结构列表
+  policy 策略名字符串
+
+"get_positions"  获取当前持仓事件 （APP ===> 服务器）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "username": username, "policy": policy}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+username 登录用户名字符串
+policy 策略名字符串
+
+"get_positions"  获取当前持仓事件响应事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "policies": [{"policy": policy, "positions": [{"secname": secname, "security": security, "positions": positions, "price": price}]}]}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+policies 策略组合结构列表
+  policy 策略名字符串
+  positions 仓位结构列表
+    secname 股票名称字符串
+    security 股票代码字符串
+    positions 仓位百分比值（浮点型值）
+    price 下单价格（浮点型值）
+
+"latest_orders"  获取最新下单事件 （APP ===> 服务器）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "username": username, "policy": policy}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+username 登录用户名字符串
+policy 策略名字符串
+
+"latest_orders"  获取最新下单事件响应事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "policies": [{"policy": policy, "orders": [{"tradetime": tradetime, "secname": secname, "security": security, "positions": positions, "price": price}]}]}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+policies 策略组合结构列表
+  policy 策略名字符串
+  orders 仓位结构列表
+    tradetime 交易时间（datetime）
+    secname 股票名称字符串
+    security 股票代码字符串
+    positions 仓位百分比值（浮点型值）
+    price 下单价格（浮点型值）
+
+"new_order"  最新下单推送事件 （服务器 ===> APP）
+参数：JSON字符串 {"timeStamp": timestamp, "rand": rand, "policy": policy, "orders": [{"tradetime": tradetime, "secname": secname, "security": security, "positions": positions, "price": price}]}
+timeStamp 时间戳
+rand 随机数（32位整型数据）
+policy 策略名字符串
+orders 仓位结构列表
+  tradetime 交易时间（datetime）
+  secname 股票名称字符串
+  security 股票代码字符串
+  positions 仓位百分比值（浮点型值）
+  price 下单价格（浮点型值）
