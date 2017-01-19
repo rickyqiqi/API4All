@@ -82,6 +82,10 @@ def get_variables_updated(context, addstring):
             and g.minEPS != content["g.minEPS"]:
             g.minEPS = content["g.minEPS"]
             valueUpdated = True
+        if content.has_key('g.minIncNetProfit') and (type(content["g.minIncNetProfit"]) == types.FloatType or type(content["g.minIncNetProfit"]) == types.IntType) \
+            and g.minIncNetProfit != content["g.minIncNetProfit"]:
+            g.minIncNetProfit = content["g.minIncNetProfit"]
+            valueUpdated = True
         if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType \
             and g.recommend_freq != content["g.recommend_freq"]:
             g.recommend_freq = content["g.recommend_freq"]
@@ -174,6 +178,7 @@ def initialize(context):# 参数版本号
     g.minPE = None
     g.maxPE = None
     g.minEPS = 0
+    g.minIncNetProfit = None
     g.maxrbstd = {}
     g.exceptions = []
     g.stockscrashed = []
@@ -226,6 +231,8 @@ def log_param():
         log.info("选股PE值范围: %d~%d" %(g.minPE, g.maxPE))
     if g.minEPS != None :
         log.info("选股最小EPS值: %d" %(g.minEPS))
+    if g.minIncNetProfit != None :
+        log.info("选股最小净利润增长率值: %.02f%%" %(g.minIncNetProfit*100))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
     log.info("是否开启股票多头趋势加分: %s" %(g.rank_stock_score_plus_allowed))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
@@ -392,6 +399,10 @@ def Multi_Select_Stocks(context, data):
     if g.minEPS != None :
         q = q.filter(
             indicator.eps > g.minEPS,
+            )
+    if g.minIncNetProfit != None :
+        q = q.filter(
+            indicator.inc_net_profit_year_on_year > (g.minIncNetProfit*100),
             )
     # 按市值升序排列
     q = q.order_by(
