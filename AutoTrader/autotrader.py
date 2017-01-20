@@ -30,6 +30,12 @@ logging.config.fileConfig("/var/www/autotrader/logger.conf")
 logger = logging.getLogger("main")
 telegramlogger = logging.getLogger("telegram")
 
+# check if mail sender process in running, if not start it
+cmd_line = 'python /var/www/autotrader/mailsender/mailsender.py'
+cmd_output = os.popen("pgrep -f \'%s\'" % (cmd_line)).read()
+if cmd_output == '':
+    os.popen("%s &" % (cmd_line))
+
 @app.route('/autotrader/authentiate', methods=['POST'])
 def authentiate():
     # uncoded response data
