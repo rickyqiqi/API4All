@@ -13,7 +13,7 @@ from werkzeug.contrib.fixers import ProxyFix
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app)
+socketio = SocketIO(app, ping_timeout=5, ping_interval=60)
 
 #imp.reload(sys)
 #sys.setdefaultencoding('utf-8')
