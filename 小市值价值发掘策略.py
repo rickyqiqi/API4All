@@ -90,6 +90,10 @@ def get_variables_updated(context, addstring):
             and g.minIncNetProfit != content["g.minIncNetProfit"]:
             g.minIncNetProfit = content["g.minIncNetProfit"]
             valueUpdated = True
+        if content.has_key('g.incReturnInROE') and (type(content["g.incReturnInROE"]) == types.FloatType or type(content["g.incReturnInROE"]) == types.IntType) \
+            and g.incReturnInROE != content["g.incReturnInROE"]:
+            g.incReturnInROE = content["g.incReturnInROE"]
+            valueUpdated = True
         if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType \
             and g.recommend_freq != content["g.recommend_freq"]:
             g.recommend_freq = content["g.recommend_freq"]
@@ -126,9 +130,9 @@ def get_variables_updated(context, addstring):
 
 def initialize(context):# 参数版本号
     # additional string in variable configuration file name
-    g.addstring = "smallvalue4"
+    g.addstring = "smallvalueII"
 
-    g.policy_name = '小市值策略增强版'
+    g.policy_name = '小市值价值发掘策略'
 
     # 初始总金额或调整后总金额
     g.capitalValue = 50000
@@ -183,6 +187,7 @@ def initialize(context):# 参数版本号
     g.maxPE = None
     g.minEPS = 0
     g.minIncNetProfit = None
+    g.incReturnInROE = None
     g.maxrbstd = {}
     g.exceptions = []
     g.stockscrashed = []
@@ -237,6 +242,8 @@ def log_param():
         log.info("选股最小EPS值: %d" %(g.minEPS))
     if g.minIncNetProfit != None :
         log.info("选股最小净利润增长率值: %.02f%%" %(g.minIncNetProfit*100))
+    if g.incReturnInROE != None :
+        log.info("选股扣除非经常损益净资产收益率占比值: %.02f%%" %(g.incReturnInROE*100))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
     log.info("是否开启股票多头趋势加分: %s" %(g.rank_stock_score_plus_allowed))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
@@ -407,6 +414,11 @@ def Multi_Select_Stocks(context, data):
     if g.minIncNetProfit != None :
         q = q.filter(
             indicator.inc_net_profit_year_on_year > (g.minIncNetProfit*100),
+            )
+    if g.incReturnInROE != None :
+        # 扣除非经常损益后的净资产收益率/净资产收益率ROE需要达到一定比例，即非经常损益占净资产比例不能太大
+        q = q.filter(
+            indicator.inc_return > (indicator.roe*g.incReturnInROE),
             )
     # 按市值升序排列
     q = q.order_by(
