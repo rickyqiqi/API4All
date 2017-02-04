@@ -82,6 +82,10 @@ def get_variables_updated(context, addstring):
             and g.maxPE != content["g.maxPE"]:
             g.maxPE = content["g.maxPE"]
             valueUpdated = True
+        if content.has_key('g.PEG') and (type(content["g.PEG"]) == types.FloatType or type(content["g.PEG"]) == types.IntType) \
+            and g.PEG != content["g.PEG"]:
+            g.PEG = content["g.PEG"]
+            valueUpdated = True
         if content.has_key('g.minEPS') and type(content["g.minEPS"]) == types.IntType \
             and g.minEPS != content["g.minEPS"]:
             g.minEPS = content["g.minEPS"]
@@ -185,6 +189,7 @@ def initialize(context):# 参数版本号
     g.adjust_position_minute = 50
     g.minPE = None
     g.maxPE = None
+    g.PEG = None
     g.minEPS = 0
     g.minIncNetProfit = None
     g.incReturnInROE = None
@@ -238,6 +243,8 @@ def log_param():
     log.info("买入股票数目: %d" %(g.stockCount))
     if g.maxPE != None and g.minPE != None and g.maxPE > g.minPE :
         log.info("选股PE值范围: %d~%d" %(g.minPE, g.maxPE))
+    if g.PEG != None :
+        log.info("选股PEG指标(市盈率相对盈利增长比率)值: %.02f%%" %(g.PEG*100))
     if g.minEPS != None :
         log.info("选股最小EPS值: %d" %(g.minEPS))
     if g.minIncNetProfit != None :
@@ -407,6 +414,11 @@ def Multi_Select_Stocks(context, data):
             valuation.pe_ratio > g.minPE, 
             valuation.pe_ratio < g.maxPE
             )
+    # 满足设定的PEG指标(市盈率相对盈利增长比率)
+    if g.PEG != None :
+        q = q.filter(
+            valuation.pe_ratio < indicator.inc_net_profit_year_on_year*g.PEG,
+            )
     if g.minEPS != None :
         q = q.filter(
             indicator.eps > g.minEPS,
@@ -415,8 +427,9 @@ def Multi_Select_Stocks(context, data):
         q = q.filter(
             indicator.inc_net_profit_year_on_year > (g.minIncNetProfit*100),
             )
+    # 扣除非经常损益后的净资产收益率/净资产收益率ROE需要达到一定比例
+    # 即非经常损益占净资产比例不能太大
     if g.incReturnInROE != None :
-        # 扣除非经常损益后的净资产收益率/净资产收益率ROE需要达到一定比例，即非经常损益占净资产比例不能太大
         q = q.filter(
             indicator.inc_return > (indicator.roe*g.incReturnInROE),
             )
