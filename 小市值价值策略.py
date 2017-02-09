@@ -82,6 +82,10 @@ def get_variables_updated(context, addstring):
             and g.maxPE != content["g.maxPE"]:
             g.maxPE = content["g.maxPE"]
             valueUpdated = True
+        if content.has_key('g.PEG') and (type(content["g.PEG"]) == types.FloatType or type(content["g.PEG"]) == types.IntType) \
+            and g.PEG != content["g.PEG"]:
+            g.PEG = content["g.PEG"]
+            valueUpdated = True
         if content.has_key('g.minEPS') and type(content["g.minEPS"]) == types.IntType \
             and g.minEPS != content["g.minEPS"]:
             g.minEPS = content["g.minEPS"]
@@ -89,6 +93,14 @@ def get_variables_updated(context, addstring):
         if content.has_key('g.minIncNetProfit') and (type(content["g.minIncNetProfit"]) == types.FloatType or type(content["g.minIncNetProfit"]) == types.IntType) \
             and g.minIncNetProfit != content["g.minIncNetProfit"]:
             g.minIncNetProfit = content["g.minIncNetProfit"]
+            valueUpdated = True
+        if content.has_key('g.incReturnInROE') and (type(content["g.incReturnInROE"]) == types.FloatType or type(content["g.incReturnInROE"]) == types.IntType) \
+            and g.incReturnInROE != content["g.incReturnInROE"]:
+            g.incReturnInROE = content["g.incReturnInROE"]
+            valueUpdated = True
+        if content.has_key('g.topdropthreshold') and (type(content["g.topdropthreshold"]) == types.FloatType) \
+            and g.topdropthreshold != content["g.topdropthreshold"]:
+            g.topdropthreshold = content["g.topdropthreshold"]
             valueUpdated = True
         if content.has_key('g.recommend_freq') and type(content["g.recommend_freq"]) == types.IntType \
             and g.recommend_freq != content["g.recommend_freq"]:
@@ -126,9 +138,9 @@ def get_variables_updated(context, addstring):
 
 def initialize(context):# 参数版本号
     # additional string in variable configuration file name
-    g.addstring = "smallvalue4"
+    g.addstring = "smallvalueIIa"
 
-    g.policy_name = '小市值策略增强版'
+    g.policy_name = '小市值价值策略'
 
     # 初始总金额或调整后总金额
     g.capitalValue = 50000
@@ -181,13 +193,20 @@ def initialize(context):# 参数版本号
     g.adjust_position_minute = 50
     g.minPE = None
     g.maxPE = None
+    g.PEG = None
     g.minEPS = 0
     g.minIncNetProfit = None
+    g.incReturnInROE = None
+    # 需要调仓标记
+    g.todobuy = False
     g.maxrbstd = {}
     g.exceptions = []
     g.stockscrashed = []
     g.stopstocks = []
-    #g.maxvalue = {} # 购买之后的最高价列表
+    g.maxvalue = {} # 购买之后的最高价列表
+    g.minutesinlowprice = {} # 股价低于最高价向下降幅阈值计时（分钟）
+    g.minutesthreshold = 120 # 股价计时阈值（分钟）
+    g.topdropthreshold = 0.05 # 股价低于最高价向下降幅阈值
     g.stockrecommend = []
     g.recommend_freq = 5
     # 股票多头趋势加分项参数
@@ -233,10 +252,15 @@ def log_param():
     log.info("买入股票数目: %d" %(g.stockCount))
     if g.maxPE != None and g.minPE != None and g.maxPE > g.minPE :
         log.info("选股PE值范围: %d~%d" %(g.minPE, g.maxPE))
+    if g.PEG != None :
+        log.info("选股PEG指标(市盈率相对盈利增长比率)值: %.02f%%" %(g.PEG*100))
     if g.minEPS != None :
         log.info("选股最小EPS值: %d" %(g.minEPS))
     if g.minIncNetProfit != None :
         log.info("选股最小净利润增长率值: %.02f%%" %(g.minIncNetProfit*100))
+    if g.incReturnInROE != None :
+        log.info("选股扣除非经常损益净资产收益率占比值: %.02f%%" %(g.incReturnInROE*100))
+    log.info("股价低于最高价向下降幅阈值: %.02f%%" %(g.topdropthreshold*100))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
     log.info("是否开启股票多头趋势加分: %s" %(g.rank_stock_score_plus_allowed))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
@@ -400,6 +424,11 @@ def Multi_Select_Stocks(context, data):
             valuation.pe_ratio > g.minPE, 
             valuation.pe_ratio < g.maxPE
             )
+    # 满足设定的PEG指标(市盈率相对盈利增长比率)
+    if g.PEG != None :
+        q = q.filter(
+            valuation.pe_ratio < indicator.inc_net_profit_year_on_year*g.PEG,
+            )
     if g.minEPS != None :
         q = q.filter(
             indicator.eps > g.minEPS,
@@ -407,6 +436,12 @@ def Multi_Select_Stocks(context, data):
     if g.minIncNetProfit != None :
         q = q.filter(
             indicator.inc_net_profit_year_on_year > (g.minIncNetProfit*100),
+            )
+    # 扣除非经常损益后的净资产收益率/净资产收益率ROE需要达到一定比例
+    # 即非经常损益占净资产比例不能太大
+    if g.incReturnInROE != None :
+        q = q.filter(
+            indicator.inc_return > (indicator.roe*g.incReturnInROE),
             )
     # 按市值升序排列
     q = q.order_by(
@@ -545,28 +580,37 @@ def handle_data(context, data):
 #                #有仓位就清仓
 #    		    log.info('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
-#    	#设置为2，避免当天再次买入股票
-#    	g.days = 2
+#    	#设置为周期的最后第2天，避免当天再次买入股票
+#    	g.days = g.period-1
 #        return
 
     # 检查止盈止损条件，并操作股票
-    todobuy = False
     for stock in g.stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
-            # 每分钟监测，如果有更高价则记录之，如果从最高价回撤9.9%，则抛掉
-            #try:
-            #    if data[stock].close > g.maxvalue[stock] :
-            #        g.maxvalue[stock] = data[stock].close
-            #except KeyError:
-            #    g.maxvalue[stock] = data[stock].close
-            #if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) < -0.099 :
-            #    position = context.portfolio.positions[stock]
-            #    if close_position(context, position):
-            #        todobuy = True
-            #        log.info('止损: ')
-            #        g.exceptions.append({'stock': stock, 'days': 0})
-            #        curr_data = get_current_data()
-            #        log.info('Sell: %s(%s), %02f, %02f' %(curr_data[stock].name, stock,data[stock].close,g.maxvalue[stock]))
+            # 每分钟监测，如果有更高价则记录之，如果从最高价回撤一定比例，则抛掉
+            try:
+                if data[stock].close > g.maxvalue[stock] :
+                    g.maxvalue[stock] = data[stock].close
+            except KeyError:
+                g.maxvalue[stock] = data[stock].close
+            if ((data[stock].close - g.maxvalue[stock]) / g.maxvalue[stock]) <= -g.topdropthreshold :
+                if g.minutesinlowprice[stock] == 0:
+                    curr_data = get_current_data()
+                    log.info('当前%s（%s）股价（%.02f）低于最高价（%.02f）向下降幅阈值' %(curr_data[stock].name, stock, data[stock].close, g.maxvalue[stock]))
+                g.minutesinlowprice[stock] += 1
+            else:
+                # 不连续状态则归零
+                if g.minutesinlowprice[stock] < g.minutesthreshold:
+                    g.minutesinlowprice[stock] = 0
+            # 股价持续低于最高价向下降幅阈值则止损
+            if g.minutesinlowprice[stock] >= g.minutesthreshold:
+                position = context.portfolio.positions[stock]
+                if close_position(context, position):
+                    g.todobuy = True
+                    log.info('持续低于最高价向下降幅阈值，止损: ')
+                    g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
+                    curr_data = get_current_data()
+                    log.info('Sell: %s(%s), %02f, %02f' %(curr_data[stock].name, stock,data[stock].close,g.maxvalue[stock]))
 
             # 对当天下跌幅度过大的股票进行计数统计
             #if isStockBearish(stock, data, 5, 0.05, 0.02) :
@@ -578,7 +622,7 @@ def handle_data(context, data):
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
-                    todobuy = True
+                    g.todobuy = True
                     log.info('止损: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': data[stock].close, 'targetvalue': 0.0})
                     curr_data = get_current_data()
@@ -589,7 +633,7 @@ def handle_data(context, data):
             elif dr3cur >= g.maxrbstd[stock]['maxr']*1.100:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
-                    todobuy = True
+                    g.todobuy = True
                     log.info('止盈: ')
                     g.exceptions.append({'stock': stock, 'stopvalue': 0.0, 'targetvalue': data[stock].close})
                     curr_data = get_current_data()
@@ -600,13 +644,13 @@ def handle_data(context, data):
         stopfactor = 2
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
     if (len(g.stocks) > 0) and (len(g.stockscrashed)*4.0/3 >= len(g.stocks) or len(g.stopstocks)*stopfactor >= len(g.stocks)) :
-        todobuy = False
+        g.todobuy = False
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
             log.info('多只股票达到止损线，清仓')
             sell_all_stocks(context)
-            # 修整1天，设置为2，避免当天再次买入股票
-            g.days = 2
+            # 修整1天，设置为周期的最后第2天，避免当天再次买入股票
+            g.days = g.period-1
 
     pos_adjust_time = (hour == g.adjust_position_hour and minute== g.adjust_position_minute)
     # 有仓位、调仓时间或实盘时检查二八指标
@@ -650,8 +694,8 @@ def handle_data(context, data):
             #有仓位就清仓
             log.info('二八未满足条件，清仓')
             sell_all_stocks(context)
-            # 修整1天，设置为2，避免当天再次买入股票
-            g.days = 2
+            # 修整1天，设置为周期的最后第2天，避免当天再次买入股票
+            g.days = g.period-1
 
     # 推荐股票
     if (minute % g.recommend_freq == 0) :
@@ -684,7 +728,7 @@ def handle_data(context, data):
         #if (g.ret1>0.01 and g.gradient1>0.01) or g.ret2>0.01 or g.ret8>0.01 :
         if g.ret2>0.01 or g.ret8>0.01 :
             g.days += 1
-            if todobuy or (g.days % g.period == 1):            
+            if g.todobuy or (g.days % g.period == 1):            
                 log.info('持有，每%d天进行调仓' %(g.period))
                 buy_stocks(context, data)
                 update_maxr_bstd(context)
@@ -781,9 +825,11 @@ def buy_stocks(context, data):
             log.info('Rank Outof 10, Sell: %s(%s)' %(curr_data[stock].name, stock))
 
     #初始化新选中的股票的最高价
-    #for stock in g.stocks :
-    #    if stock not in context.portfolio.positions.keys():
-    #        g.maxvalue[stock] = data[stock].close
+    for stock in g.stocks :
+        if stock not in context.portfolio.positions.keys():
+            g.maxvalue[stock] = data[stock].close
+            #初始化股价低于最高价向下降幅阈值计时
+            g.minutesinlowprice[stock] = 0
 
     valid_count = 0
     for stock in context.portfolio.positions.keys():
@@ -855,20 +901,29 @@ def before_trading_start(context):
     update_maxr_bstd(context)
 
     #初始化购买之后的最高价，剔除不在持仓范围内的股票最高价元素
-    #maxvalue = {}
-    #for stock in context.portfolio.positions.keys():
-    #    if stock in g.stocks:
-    #        try:
-    #            maxvalue[stock] = g.maxvalue[stock]
-    #        except KeyError:
-    #            maxvalue[stock] = 0
-    #    else:
-    #        h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
-    #        if (len(h) > 0) and (not isnan(h.close[-1])):
-    #            maxvalue[stock] = h.close[-1]
-    #        else:
-    #            maxvalue[stock] = 0
-    #g.maxvalue = maxvalue
+    maxvalue = {}
+    minutesinlowprice = {}
+    for stock in context.portfolio.positions.keys():
+        if stock in g.stocks:
+            try:
+                maxvalue[stock] = g.maxvalue[stock]
+            except KeyError:
+                maxvalue[stock] = 0.01
+            #记录上一日股价低于最高价向下降幅阈值计时值
+            try:
+                minutesinlowprice[stock] = g.minutesinlowprice[stock]
+            except KeyError:
+                minutesinlowprice[stock] = 0
+        else:
+            h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
+            if (len(h) > 0) and (not isnan(h.close[-1])):
+                maxvalue[stock] = h.close[-1]
+            else:
+                maxvalue[stock] = 0.01
+            #初始化股价低于最高价向下降幅阈值计时
+            minutesinlowprice[stock] = 0
+    g.minutesinlowprice = minutesinlowprice
+    g.maxvalue = maxvalue
 
 #================================================================================
 #每天收盘后
@@ -886,6 +941,7 @@ def after_trading_end(context):
     g.gradient2 = 0
     g.gradient8 = 0
 
+    g.todobuy = False
     g.stockscrashed = []
     g.stopstocks = []
 
