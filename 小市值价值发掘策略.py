@@ -612,13 +612,14 @@ def handle_data(context, data):
             #        curr_data = get_current_data()
             #        log.info('Sell: %s(%s), %02f, %02f' %(curr_data[stock].name, stock,data[stock].close,g.maxvalue[stock]))
 
+            # 获取最近2日收盘价
+            h = attribute_history(stock, 2, unit='1d', fields=('close'), skip_paused=True)
             # 对当天下跌幅度过大的股票进行计数统计
-            #if isStockBearish(stock, data, 5, 0.05, 0.02) :
-            if data[stock].close  < 0.955*getStockPrice(stock, 1) :
+            if data[stock].close  < 0.955*h['close'].values[-1] :
                 if g.stockscrashed.count(stock) == 0:
                     g.stockscrashed.append(stock)
             # 当前价格超出止盈止损值，则卖出该股票
-            dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
+            dr3cur = (data[stock].close-h['close'].values[-2])/h['close'].values[-2]
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
