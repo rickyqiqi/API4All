@@ -275,6 +275,10 @@ def log_param():
             log.info("备选股票池: %s" %(str(g.stock_candidates)))
     log.info("---------------------------------------------")
 
+# 获取前n个单位时间当时的收盘价
+def get_close_price(security, n, unit='1d'):
+    return attribute_history(security, n, unit, ('close'), True)['close'][0]
+
 def getStockPrice(stock, interval):
     h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
     return h['close'].values[0]
@@ -612,14 +616,15 @@ def handle_data(context, data):
             #        curr_data = get_current_data()
             #        log.info('Sell: %s(%s), %02f, %02f' %(curr_data[stock].name, stock,data[stock].close,g.maxvalue[stock]))
 
-            # 获取最近2日收盘价
-            h = attribute_history(stock, 2, unit='1d', fields=('close'), skip_paused=True)
+            # 获取最近1日收盘价
+            h = attribute_history(stock, 1, unit='1d', fields=('close'), skip_paused=True)
             # 对当天下跌幅度过大的股票进行计数统计
             if data[stock].close  < 0.955*h['close'].values[-1] :
                 if g.stockscrashed.count(stock) == 0:
                     g.stockscrashed.append(stock)
             # 当前价格超出止盈止损值，则卖出该股票
-            dr3cur = (data[stock].close-h['close'].values[-2])/h['close'].values[-2]
+            dr3cur = (data[stock].close-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
+            #dr3cur = (data[stock].close-h['close'].values[-2])/h['close'].values[-2]
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 position = context.portfolio.positions[stock]
                 if close_position(context, position):
@@ -657,23 +662,32 @@ def handle_data(context, data):
     # 有仓位、调仓时间或实盘时检查二八指标
     if (context.portfolio.positions_value > 0) or pos_adjust_time or g.real_market_simulate:
         # 获取前一天指数收盘价
-        #hs1 = getStockPrice(g.zs1, g.lag)
+        hs1 = getStockPrice(g.zs1, g.lag)
         hs2 = getStockPrice(g.zs2, g.lag)
         hs8 = getStockPrice(g.zs8, g.lag)
-        #cp1 = data[g.zs1].close
-        cp2 = data[g.zs2].close
-        cp8 = data[g.zs8].close
+        if isnan(data[g.zs1].close):
+            cp1 = get_close_price(g.zs1, 1, '1m')
+        else:
+            cp1 = data[g.zs1].close
+        if isnan(data[g.zs2].close):
+            cp2 = get_close_price(g.zs2, 1, '1m')
+        else:
+            cp2 = data[g.zs2].close
+        if isnan(data[g.zs8].close):
+            cp8 = get_close_price(g.zs8, 1, '1m')
+        else:
+            cp8 = data[g.zs8].close
 
         #cmp1result = True
         cmp2result = True
         cmp8result = True
 
-        #if (not isnan(hs1)) and (not isnan(cp1)):
-        #    g.ret1 = (cp1 - hs1) / hs1
+        if (not isnan(hs1)) and (not isnan(cp1)):
+            g.ret1 = (cp1 - hs1) / hs1
         #    if g.ret1>-0.004 :
         #        cmp1result = False
-        #else:
-        #    g.ret1 = 0
+        else:
+            g.ret1 = 0
         if (not isnan(hs2)) and (not isnan(cp2)):
             g.ret2 = (cp2 - hs2) / hs2
             if g.ret2>-0.004 :
@@ -686,8 +700,8 @@ def handle_data(context, data):
                 cmp8result = False
         else:
             g.ret8 = 0
-        #record(index1=g.ret1, index2=g.ret2, index8=g.ret8)
-        record(index2=g.ret2, index8=g.ret8)
+        record(index1=g.ret1, index2=g.ret2, index8=g.ret8)
+        #record(index2=g.ret2, index8=g.ret8)
 
     # 检查二八指标是否达到降幅下限，如达到则清仓观望
     if context.portfolio.positions_value > 0 :
@@ -716,10 +730,10 @@ def handle_data(context, data):
     if pos_adjust_time:
         #log.error("%s" % (str(g.ret_last5d)))
         #log.error("%f, %f, %f" %(g.ret1, g.ret2, g.ret8))
-        if context.current_dt >= datetime.datetime(2006, 10, 10) and len(g.ret_last5d) >= 5:
+        #if context.current_dt >= datetime.datetime(2006, 10, 10) and len(g.ret_last5d) >= 5:
             #g.gradient1 = g.ret1 - g.ret_last5d[0][0]
-            g.gradient2 = g.ret2 - g.ret_last5d[0][1]
-            g.gradient8 = g.ret8 - g.ret_last5d[0][2]
+            #g.gradient2 = g.ret2 - g.ret_last5d[0][1]
+            #g.gradient8 = g.ret8 - g.ret_last5d[0][2]
 
             #if g.gradient1 <= -0.01 and g.gradient2 <= -0.01 and g.gradient8 <= -0.01:
             #    log.error("所有指数向下趋势，减仓")
