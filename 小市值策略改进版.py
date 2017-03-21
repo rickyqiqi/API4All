@@ -40,7 +40,7 @@ from mailintf import *
 def get_variables_updated(context, addstring):
     valueUpdated = False
     # 配置值文件
-    if g.real_market_simulate:
+    if context.run_params.type == 'sim_trade':
         configfilename = 'config/real_%s.conf' %(addstring)
     else:
         configfilename = 'config/loop_%s.conf' %(addstring)
@@ -74,29 +74,9 @@ def get_variables_updated(context, addstring):
             and g.recommend_freq != content["g.recommend_freq"]:
             g.recommend_freq = content["g.recommend_freq"]
             valueUpdated = True
-        if content.has_key('g.rank_stock_score_plus_allowed') and type(content["g.rank_stock_score_plus_allowed"]) == types.BooleanType \
-            and g.rank_stock_score_plus_allowed != content["g.rank_stock_score_plus_allowed"]:
-            g.rank_stock_score_plus_allowed = content["g.rank_stock_score_plus_allowed"]
-            valueUpdated = True
         if content.has_key('g.autotrader_inform_enabled') and type(content["g.autotrader_inform_enabled"]) == types.BooleanType \
             and g.autotrader_inform_enabled != content["g.autotrader_inform_enabled"]:
             g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
-            valueUpdated = True
-        if content.has_key('g.stock_appointed') and type(content["g.stock_appointed"]) == types.ListType \
-            and g.stock_appointed != content["g.stock_appointed"]:
-            g.stock_appointed = content["g.stock_appointed"]
-            valueUpdated = True
-        if content.has_key('g.stock_candidates') and type(content["g.stock_candidates"]) == types.ListType \
-            and g.stock_candidates != content["g.stock_candidates"]:
-            g.stock_candidates = content["g.stock_candidates"]
-            valueUpdated = True
-        if content.has_key('g.index_stock_2_select') and type(content["g.index_stock_2_select"]) == types.BooleanType \
-            and g.index_stock_2_select != content["g.index_stock_2_select"]:
-            g.index_stock_2_select = content["g.index_stock_2_select"]
-            valueUpdated = True
-        if content.has_key('g.index_pool') and type(content["g.index_pool"]) == types.ListType \
-            and g.index_pool != content["g.index_pool"]:
-            g.index_pool = content["g.index_pool"]
             valueUpdated = True
 
     except:
@@ -106,12 +86,12 @@ def get_variables_updated(context, addstring):
 
 def initialize(context):# 参数版本号
     # additional string in variable configuration file name
-    g.addstring = "small4stocks"
+    g.addstring = "smallshare4"
 
-    g.policy_name = '小市值策略增强版'
+    g.policy_name = '小市值策略改进版'
 
     # 初始总金额或调整后总金额
-    g.capitalValue = 50000
+    g.capitalValue = context.portfolio.total_value
     # 金额总差值 = 当前总值 - 新本金总金额 - 之前的利润(0)
     g.totalValueDifference = context.portfolio.total_value - g.capitalValue
 
@@ -127,11 +107,9 @@ def initialize(context):# 参数版本号
     # 'simple_backtest': 回测, 通过点击’编译运行’运行
     # 'full_backtest': 回测, 通过点击’运行回测’运行
     # 'sim_trade': 模拟交易
-    g.real_market_simulate = False
     if context.run_params.type == 'sim_trade':
         # 使用真实价格回测(模拟盘推荐如此，回测请注释)
         set_option('use_real_price', True)
-        g.real_market_simulate = True
 
     # 加载统计模块
     g.trade_stat = trade_stat()
@@ -141,14 +119,6 @@ def initialize(context):# 参数版本号
     g.zs8 =  '399101.XSHE' #'159902.XSHE' #'399005.XSHE' #中小板指数
 
     g.lag = 20 # 回看前20天
-
-    g.ret1 = 0
-    g.ret2 = 0
-    g.ret8 = 0
-    g.ret_last5d = []
-    g.gradient1 = 0
-    g.gradient2 = 0
-    g.gradient8 = 0
 
     # 对比标的
     set_benchmark('000300.XSHG') 
@@ -166,35 +136,9 @@ def initialize(context):# 参数版本号
     #g.maxvalue = {} # 购买之后的最高价列表
     g.stockrecommend = []
     g.recommend_freq = 5
-    # 股票多头趋势加分项参数
-    g.rank_stock_score_plus_allowed = True
-    if g.rank_stock_score_plus_allowed:
-        # 测试多头趋势的均线长度
-        g.ma_lengths = [5,10,20,60,120]
-        # 测试买入回踩的均线长度
-        g.test_ma_length = 10
-        # 买入时回踩但必须站住的均线
-        g.stand_ma_length = 10
-        # 多头趋势天数
-        g.in_trend_days = 7
 
     # 配置是否开启autotrader通知
     g.autotrader_inform_enabled = False
-
-    # 指定股票列表
-    # "510050.XSHG" - 华夏上证50ETF
-    # "160706.XSHE" - 嘉实沪深300ETF联接LOF
-    # "159902.XSHE" - 华夏中小板ETF
-    g.stock_appointed = []
-    # 备选股票池，空表示所有股票备选
-    g.stock_candidates = []
-    # 是否使用指数池选股配置
-    g.index_stock_2_select = False
-    # 指数池
-    # '000016.XSHG' - 上证50指数
-    # '000300.XSHG' - 沪深300指数
-    # '399005.XSHE' - 中小板指数
-    g.index_pool = []
 
     # 打印策略参数
     log_param()
@@ -208,18 +152,11 @@ def log_param():
     log.info("初始总金额或调整后总金额: %d" %(g.capitalValue))
     log.info("买入股票数目: %d" %(g.stockCount))
     log.info("推荐股票频率: %d分钟" %(g.recommend_freq))
-    log.info("是否开启股票多头趋势加分: %s" %(g.rank_stock_score_plus_allowed))
     log.info("是否开启autotrader通知: %s" %(g.autotrader_inform_enabled))
 
-    if len(g.stock_appointed) > 0:
-        log.info("指定股票列表: %s" %(str(g.stock_appointed)))
-    else:
-        log.info("是否使用指数池选股配置: %s" %(g.index_stock_2_select))
-        if g.index_stock_2_select:
-            log.info("指数池: %s" %(str(g.index_pool)))
-        else:
-            log.info("备选股票池: %s" %(str(g.stock_candidates)))
-    log.info("---------------------------------------------")
+# 获取前n个单位时间当时的收盘价
+def get_close_price(security, n, unit='1d'):
+    return attribute_history(security, n, unit, ('close'), True)['close'][0]
 
 def getStockPrice(stock, interval):
     h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
@@ -245,80 +182,6 @@ def sell_all_stocks(context):
     #很关键！第一次写程序的时候没有这一句，会造成下面的无法买入。
     g.days = 0          
 
-# 计算买入信号
-# 输入所有多头趋势股票
-# 返回一list，包含所有在趋势内但是踩到测量均线的股票
-def buy_signal(available_stocks, context):
-    in_trend_stocks = get_in_trends(available_stocks, context)
-
-    # 建立空list 
-    signal = []
-    # 对于所有多头趋势股票
-    for security in in_trend_stocks:
-        # 获取历史收盘价
-        past_prices = attribute_history(security,g.test_ma_length, '1d', 'close', skip_paused = True)
-        # 计算均线
-        test_ma = sum(past_prices).iloc[0] / g.test_ma_length
-        # 获取站住均线数据
-        past_prices_2 = attribute_history(security, g.stand_ma_length, '1d', 'close', skip_paused= True) 
-        # 计算均线
-        stand_ma = sum(past_prices_2).iloc[0] / g.stand_ma_length
-        # 获取昨日信息
-        previous_history = attribute_history(security, 1, '1d', ['close','low'])
-        # 昨日收盘价
-        current_price = previous_history['close'].iloc[0]
-        # 昨日最低价
-        previous_low = previous_history['low'].iloc[0]
-        # 如果该股票没有持仓，并且前收盘价低于目标均线
-        if current_price <= test_ma :
-            # 加入信号list 
-            signal.append(security)
-    # 输出信号
-    return(signal)
-
-# 获取所有多头趋势股票
-# 输入一list有效股票
-# 输出一list，为所有符合从小到长均线排列从大到小的股票
-def get_in_trends(available_stocks, context):
-    # 建立需要入选的股票list，只要发现股票有两根均线不符合多头趋势，就加入删除名单并停止计算
-    stockselected = []
-    # 对于所有有效股票
-    for security in available_stocks:
-        # 获取最长ma长度
-        longest_ma = max(g.ma_lengths)
-        # 今日日期
-        date = context.current_dt
-        # 获取过去价格
-        all_past_prices = attribute_history(security,longest_ma + g.in_trend_days -1, '1d', 'close',  skip_paused = True)
-        # 对于认定趋势的每一天
-        for day in range(g.in_trend_days):
-            # 筛去尾部的-day天数据
-            if day == 0:
-                past_prices = all_past_prices
-            else:
-                past_prices = all_past_prices[:-day]
-            # 建立空均线值list 
-            mas = []
-            # 对于所有均线长度
-            for length in g.ma_lengths:
-                # 截取相应数据
-                ma_data = past_prices[-length:]
-                # 算均值
-                ma = sum(ma_data).iloc[0]/ length
-                # 计入list 
-                mas.append(ma)
-            # 从大到小排列均值list 
-            sorted_mas = sorted(mas)
-            sorted_mas.reverse()
-            # 如果排列之后和之前不
-            if mas == sorted_mas:
-                # 加入入选名单行列
-                stockselected.append(security)
-                # 不继续进行运算
-                break
-    # 返回趋势股票list 
-    return(stockselected)
-
 def Multi_Select_Stocks(context, data):
     #更新排除之前被止盈止损的股票，允许其进入筛选备选股池
     for dstock in g.exceptions :
@@ -328,29 +191,9 @@ def Multi_Select_Stocks(context, data):
         elif (dstock['targetvalue'] != 0.0) and ((data[dstock['stock']].close-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
             g.exceptions.remove(dstock)
 
-    # 指定股票列表非空，则直接返回指定股票列表
-    if len(g.stock_appointed) > 0:
-        return g.stock_appointed
-
-    # 获取备选股票
-    stocks = []
-    # 是否使用指数池选股配置
-    if g.index_stock_2_select:
-        #log.info("指数股票池：%s" %(str(g.index_pool)))
-        # 指数池
-        for index in g.index_pool:
-            stocks += get_index_stocks(index)
-    else:
-        # 备选股票池，空表示所有股票备选
-        if len(g.stock_candidates) == 0:
-            #log.info("所有股票池")
-            candidates = get_all_securities(['stock'])
-            #排除新股
-            stocks = candidates[(context.current_dt.date() - candidates.start_date) > datetime.timedelta(60)].index
-        else:
-            #log.info("备选股票池: %s" %(str(g.stock_candidates)))
-            stocks = g.stock_candidates
-
+    stocks = get_all_securities(['stock'])
+    #排除新股
+    stocks = stocks[(context.current_dt.date() - stocks.start_date) > datetime.timedelta(60)].index
     #stocks  = stocks.index
     date=context.current_dt.strftime("%Y-%m-%d")
     st=get_extras('is_st', stocks, start_date=date, end_date=date, df=True)
@@ -358,9 +201,6 @@ def Multi_Select_Stocks(context, data):
     stocks = list(st[st==False].index)
     stocks = unpaused(stocks)
     stocks = filterStarName(stocks)
-
-    if g.rank_stock_score_plus_allowed:
-        addscorelist = get_in_trends(stocks, context)
 
     q = query(
         valuation.code,
@@ -408,9 +248,6 @@ def Multi_Select_Stocks(context, data):
         currPrice = data[s].close
         #score = (currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15)
         score = ((currPrice-lowPrice130)+(currPrice-highPrice130)+(currPrice-avg15))/currPrice
-        if g.rank_stock_score_plus_allowed:
-            if s in addscorelist :
-                score -= 0.08
         stock_select[s] = score
 
     # 确保有股票被选中
@@ -478,11 +315,11 @@ def isStockBearish(stock, data, interval, breakrate=0.03, lastbreakrate=0.02):
 # 每个单位时间(如果按天回测,则每天调用一次,如果按分钟,则每分钟调用一次)调用一次
 def handle_data(context, data):
     # 检查变量是否在文件中更新
-    if g.real_market_simulate and get_variables_updated(context, g.addstring):
+    if context.run_params.type == 'sim_trade' and get_variables_updated(context, g.addstring):
         # 打印策略参数
         log_param()
 
-    if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
+    if (context.run_params.type == 'sim_trade' or g.indebug) and g.autotrader_inform_enabled:
         # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
         if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
             # 通信状态变化，发邮件通知
@@ -567,43 +404,51 @@ def handle_data(context, data):
             # 修整1天，设置为2，避免当天再次买入股票
             g.days = 2
 
+    ret2 = 0
+    ret8 = 0
     pos_adjust_time = (hour == g.adjust_position_hour and minute== g.adjust_position_minute)
     # 有仓位、调仓时间或实盘时检查二八指标
-    if (context.portfolio.positions_value > 0) or pos_adjust_time or g.real_market_simulate:
-        # 获取超大盘指数均线
+    if (context.portfolio.positions_value > 0) or pos_adjust_time or (context.run_params.type == 'sim_trade'):
         hs1 = getStockPrice(g.zs1, g.lag)
         hs2 = getStockPrice(g.zs2, g.lag)
         hs8 = getStockPrice(g.zs8, g.lag)
-        cp1 = data[g.zs1].close
-        cp2 = data[g.zs2].close
-        cp8 = data[g.zs8].close
+        if isnan(data[g.zs1].close):
+            cp1 = get_close_price(g.zs1, 1, '1m')
+        else:
+            cp1 = data[g.zs1].close
+        if isnan(data[g.zs2].close):
+            cp2 = get_close_price(g.zs2, 1, '1m')
+        else:
+            cp2 = data[g.zs2].close
+        if isnan(data[g.zs8].close):
+            cp8 = get_close_price(g.zs8, 1, '1m')
+        else:
+            cp8 = data[g.zs8].close
 
-        cmp1result = True
+        if (not isnan(hs1)) and (not isnan(cp1)):
+            ret1 = (cp1 - hs1) / hs1
+        else:
+            ret1 = 0
+        if (not isnan(hs2)) and (not isnan(cp2)):
+            ret2 = (cp2 - hs2) / hs2
+        else:
+            ret2 = 0
+        if (not isnan(hs8)) and (not isnan(cp8)):
+            ret8 = (cp8 - hs8) / hs8
+        else:
+            ret8 = 0
+        record(index1=ret1, index2=ret2, index8=ret8)
+
+    # 检查二八指标是否达到降幅下限，如达到则清仓观望
+    if context.portfolio.positions_value > 0:
         cmp2result = True
         cmp8result = True
 
-        if (not isnan(hs1)) and (not isnan(cp1)):
-            g.ret1 = (cp1 - hs1) / hs1
-            if g.ret1>-0.004 :
-                cmp1result = False
-        else:
-            g.ret1 = 0
-        if (not isnan(hs2)) and (not isnan(cp2)):
-            g.ret2 = (cp2 - hs2) / hs2
-            if g.ret2>-0.004 :
-                cmp2result = False
-        else:
-            g.ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            g.ret8 = (cp8 - hs8) / hs8
-            if g.ret8>-0.004 :
-                cmp8result = False
-        else:
-            g.ret8 = 0
-        record(index1=g.ret1, index2=g.ret2, index8=g.ret8)
+        if ret2>-0.004 :
+            cmp2result = False
+        if ret8>-0.004 :
+            cmp8result = False
 
-    # 检查二八指标是否达到降幅下限，如达到则清仓观望
-    if context.portfolio.positions_value > 0 :
         if (cmp2result and cmp8result) or (isStockBearish(g.zs2, data, 5, 0.04, 0.03) or isStockBearish(g.zs8, data, 5, 0.04, 0.03)) :
             #有仓位就清仓
             log.info('二八未满足条件，清仓')
@@ -612,34 +457,22 @@ def handle_data(context, data):
             g.days = 2
 
     # 推荐股票
-    if (minute % g.recommend_freq == 0) :
-        if (g.real_market_simulate or g.indebug) :  
-            stockrecommend = Multi_Select_Stocks(context, data)
-            stockrecommend.sort()
-            if cmp(g.stockrecommend, stockrecommend) != 0 :
-                g.stockrecommend = stockrecommend
-                output = ''
-                curr_data = get_current_data()
-                for stock in g.stockrecommend:
-                    output += '%s(%s), ' % (curr_data[stock].name, stock)
-                output = output[:-2]
-                log.info('当前推荐股票：%s' %(output))
+    if (minute % g.recommend_freq == 0) and (context.run_params.type == 'sim_trade' or g.indebug):
+        stockrecommend = Multi_Select_Stocks(context, data)
+        stockrecommend.sort()
+        if cmp(g.stockrecommend, stockrecommend) != 0 :
+            g.stockrecommend = stockrecommend
+            output = ''
+            curr_data = get_current_data()
+            for stock in g.stockrecommend:
+                output += '%s(%s), ' % (curr_data[stock].name, stock)
+            output = output[:-2]
+            log.info('当前推荐股票：%s' %(output))
 
     # 每天下午14:50调仓
     if pos_adjust_time:
-        #log.error("%s" % (str(g.ret_last5d)))
-        #log.error("%f, %f, %f" %(g.ret1, g.ret2, g.ret8))
-        if context.current_dt >= datetime.datetime(2006, 10, 10) and len(g.ret_last5d) >= 5:
-            g.gradient1 = g.ret1 - g.ret_last5d[0][0]
-            g.gradient2 = g.ret2 - g.ret_last5d[0][1]
-            g.gradient8 = g.ret8 - g.ret_last5d[0][2]
-
-            #if g.gradient1 <= -0.01 and g.gradient2 <= -0.01 and g.gradient8 <= -0.01:
-            #    log.error("所有指数向下趋势，减仓")
-
         #奇怪，低于101%时清仓，回测效果出奇得好。
-        #超大盘指数只有在5日上涨斜率向上的情况下，满足101%涨幅时允许买入
-        if (g.ret1>0.01 and g.gradient1>0.01) or g.ret2>0.01 or g.ret8>0.01 :
+        if ret2>0.01 or ret8>0.01 :
             g.days += 1
             if todobuy or (g.days % g.period == 1):            
                 log.info('持有，每3天进行调仓')
@@ -688,7 +521,7 @@ def order_target_value_(context, security, value):
     # 部成部撤的报单，聚宽状态是已撤，此时成交量>0，可通过成交量判断是否有成交
     order = order_target_value(security, value)
     # 模拟式盘情况下，订单非空
-    if (g.real_market_simulate or g.indebug) and order != None:
+    if (context.run_params.type == 'sim_trade' or g.indebug) and order != None:
         tradedatetime = context.current_dt
         posInPercent = value / (context.portfolio.total_value - g.totalValueDifference)
         curr_data = get_current_data()
@@ -833,21 +666,11 @@ def before_trading_start(context):
 def after_trading_end(context):
     g.trade_stat.report(context)
 
-    while len(g.ret_last5d) >= 5:
-        g.ret_last5d.pop()
-    g.ret_last5d.insert(0, (g.ret1, g.ret2, g.ret8))
-    g.ret1 = 0
-    g.ret2 = 0
-    g.ret8 = 0
-    g.gradient1 = 0
-    g.gradient2 = 0
-    g.gradient8 = 0
-
     g.stockscrashed = []
     g.stopstocks = []
 
     # 模拟实盘情况下执行
-    if (g.real_market_simulate or g.indebug) and g.autotrader_inform_enabled:
+    if (context.run_params.type == 'sim_trade' or g.indebug) and g.autotrader_inform_enabled:
         # 删除当天未完成的离线交易记录
         rm_all_records_offline()
 
