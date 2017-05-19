@@ -15,7 +15,8 @@ from flask import Flask
 from flask import request
 import logging
 import logging.config
-from pysqlcipher3 import dbapi2 as sqlite
+#from pysqlcipher3 import dbapi2 as sqlite
+from pysqlcipher import dbapi2 as sqlite
 import base64
 from Crypto import Random
 from Crypto.Cipher import AES
