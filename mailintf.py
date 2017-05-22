@@ -14,7 +14,7 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
     sender = ""
     receivers = []  # 接收邮件，可设置为你的QQ邮箱或者其他邮箱
 
-    if g.real_market_simulate:
+    if context.run_params.type == 'sim_trade':
         mailinfofile = 'config/mailreal.conf'
     else:
         mailinfofile = 'config/mailloop.conf'
@@ -68,7 +68,7 @@ def mail_to_clients(security, secname, value, price, tradedatetime, policyname):
         except smtplib.SMTPException:
             log.error("无法发送邮件")
 
-def mail_to_report(rspcode):
+def mail_to_report(content, rspcode):
     # 第三方 SMTP 服务
     mail_host=""  #设置服务器
     mail_user=""    #用户名
@@ -76,7 +76,7 @@ def mail_to_report(rspcode):
     sender = ""
     receivers = []  # 接收邮件，可设置为你的QQ邮箱或者其他邮箱
 
-    if g.real_market_simulate:
+    if context.run_params.type == 'sim_trade':
         mailinfofile = 'config/mailreal.conf'
     else:
         mailinfofile = 'config/mailloop.conf'

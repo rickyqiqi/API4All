@@ -78,6 +78,14 @@ def get_variables_updated(context, addstring):
             and g.autotrader_inform_enabled != content["g.autotrader_inform_enabled"]:
             g.autotrader_inform_enabled = content["g.autotrader_inform_enabled"]
             valueUpdated = True
+        if content.has_key('g.online_URL' ) and type(content["g.online_URL"]) == types.UnicodeType \
+            and g.online_URL != content["g.online_URL"]:
+            g.online_URL = content["g.online_URL"]
+            valueUpdated = True
+        if content.has_key('g.record_URL' ) and type(content["g.record_URL"]) == types.UnicodeType \
+            and g.record_URL != content["g.record_URL"]:
+            g.record_URL = content["g.record_URL"]
+            valueUpdated = True
 
     except:
         log.error("配置文件%s读取错误" %(configfilename))
@@ -139,6 +147,9 @@ def initialize(context):# 参数版本号
 
     # 配置是否开启autotrader通知
     g.autotrader_inform_enabled = False
+    
+    g.online_URL = 'https://172.93.35.14:60443/autotrader/onlinestatus'
+    g.record_URL = 'https://172.93.35.14:60443/autotrader/stocktrade'
 
     # 打印策略参数
     log_param()
@@ -321,12 +332,12 @@ def handle_data(context, data):
 
     if (context.run_params.type == 'sim_trade' or g.indebug) and g.autotrader_inform_enabled:
         # 检查服务器在线状态(避免回测时检查该状态严重影响回测速度，每10分钟检查一次)
-        if g.real_market_simulate and (context.current_dt.minute % 10 == 0):
+        if (context.run_params.type == 'sim_trade') and (context.current_dt.minute % 10 == 0):
             # 通信状态变化，发邮件通知
             rspcode = autotrader_online_status(0)
             if rspcode != g.online_response_code:
                 g.online_response_code = rspcode
-                mail_to_report(rspcode)
+                mail_to_report(content, rspcode)
         # 检查离线记录文件是否有未完成的离线交易，完成离线交易
         if g.online_response_code == 0:
             do_record_offline()
@@ -342,7 +353,7 @@ def handle_data(context, data):
 #    		    log.info('三只乌鸦，清仓')
 #    		    sell_all_stocks(context)
 #    	#设置为2，避免当天再次买入股票
-#    	g.days = 2
+#    	g.days = g.period-1
 #        return
 
     # 检查止盈止损条件，并操作股票
@@ -402,7 +413,7 @@ def handle_data(context, data):
             log.info('多只股票达到止损线，清仓')
             sell_all_stocks(context)
             # 修整1天，设置为2，避免当天再次买入股票
-            g.days = 2
+            g.days = g.period-1
 
     ret2 = 0
     ret8 = 0
@@ -454,7 +465,7 @@ def handle_data(context, data):
             log.info('二八未满足条件，清仓')
             sell_all_stocks(context)
             # 修整1天，设置为2，避免当天再次买入股票
-            g.days = 2
+            g.days = g.period-1
 
     # 推荐股票
     if (minute % g.recommend_freq == 0) and (context.run_params.type == 'sim_trade' or g.indebug):
