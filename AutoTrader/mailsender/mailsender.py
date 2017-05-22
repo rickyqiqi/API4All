@@ -8,7 +8,10 @@ from email.mime.text import MIMEText
 from email.header import Header
 import logging
 import logging.config
-from pysqlcipher3 import dbapi2 as sqlite
+#for python3
+#from pysqlcipher3 import dbapi2 as sqlite
+#for python2
+from pysqlcipher import dbapi2 as sqlite
 import base64
 from Crypto import Random
 from Crypto.Cipher import AES
@@ -49,10 +52,10 @@ def send_mails():
     if mail_msg == "":
         return False
 
-    logger.debug("发送邮件：%s, %s" % (mail_msg, org_recv))
+    logger.debug("发送邮件：%s, %s" % (mail_msg.encode('gbk'), org_recv.encode('gbk')))
         
     policyname = ""
-    start = mail_msg.find('策略名称：')
+    start = mail_msg.find(u'策略名称：')
     end = mail_msg.find('</p>')
     if start > 0 and end > start:
         policyname = mail_msg[start:end]
@@ -71,10 +74,10 @@ def send_mails():
     for item in receivers:
         message = MIMEText(mail_msg, 'html', 'utf-8')
         message['From'] = "<%s>" %(sender)
-        subject = policyname + '买卖信号'
+        subject = policyname + u'买卖信号'
         message['Subject'] = Header(subject, 'utf-8')
         message['To'] = "<%s>" %(item)
-        logger.info("发送邮件至：%s", item)
+        logger.info("发送邮件至：%s", item.encode('gbk'))
 
         try:
             smtpObj = smtplib.SMTP()
@@ -102,10 +105,10 @@ def send_mails():
                 recvstr = recvstr + str + ','
             # 删除最后一个逗号
             recvstr = recvstr[:-1]
-            logger.debug("邮件信息更新客户邮件数据库：%s, %s" % (mail_msg, recvstr))
+            logger.debug("邮件信息更新客户邮件数据库：%s, %s" % (mail_msg.encode('gbk'), recvstr.encode('gbk')))
             cursor.execute('update mails set receivers=? where content=? and receivers=?', (recvstr, mail_msg, org_recv))
         else:
-            logger.debug("邮件信息从客户邮件数据库中删除：%s, %s" % (mail_msg, org_recv))
+            logger.debug("邮件信息从客户邮件数据库中删除：%s, %s" % (mail_msg.encode('gbk'), org_recv.encode('gbk')))
             cursor.execute('delete from mails where content=? and receivers=?', (mail_msg, org_recv))
 
         cursor.close()
@@ -157,7 +160,7 @@ for dataitem in accountdata:
     if mail_user != "" and mail_host != "":
         break
 
-logger.debug("smtp账号信息：%s, %s, %s, %s" % (mail_user, mail_pass, sender, mail_host))
+logger.debug("smtp账号信息：%s, %s, %s, %s" % (mail_user.encode('gbk'), mail_pass.encode('gbk'), sender.encode('gbk'), mail_host.encode('gbk')))
 
 if mail_host == "":
     logger.error("SMTP主机配置空")
