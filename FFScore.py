@@ -566,12 +566,17 @@ class quantlib():
             if stock in moneyfund:
                 self.fun_tradeBond(context, stock, total_value * ratio)
             else:
-                curValue = context.portfolio.positions[stock].total_amount * curPrice
+                stock_total_amount = 0
+                stock_avg_cost = 0.0
+                if stock in context.portfolio.positions.keys():
+                    stock_total_amount = context.portfolio.positions[stock].total_amount
+                    stock_avg_cost = context.portfolio.positions[stock].avg_cost
+                curValue = stock_total_amount * curPrice
                 Quota = total_value * ratio
                 if Quota:
                     if abs(Quota - curValue) / Quota >= 0.25 or trade_style:
                         if Quota > curValue:
-                            if curPrice > context.portfolio.positions[stock].avg_cost:
+                            if curPrice > stock_avg_cost:
                                 self.fun_trade(context, stock, Quota)
                         else:
                             self.fun_trade(context, stock, Quota)
@@ -656,7 +661,8 @@ class quantlib():
 
     def fun_trade(self, context, stock, value):
         self.fun_setCommission(context, stock)
-        position = context.portfolio.positions[stock]
+        if value == 0:
+            position = context.portfolio.positions[stock]
         order = order_target_value(stock, value)
         if order != None and value == 0:
             if order.filled > 0:
