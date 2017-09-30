@@ -50,7 +50,7 @@ def fun_main(context):
         statsDate = context.current_dt.date()
 
         # 计算策略的持仓
-        position_ratio = g.FFScore.algo(context, context.FFScore_ratio, context.portfolio.portfolio_value)
+        position_ratio = g.FFScore.algo(context, context.FFScore_ratio, context.portfolio.total_value)
 
         context.stock_list = position_ratio.keys()
 
@@ -71,7 +71,7 @@ class FFScore_lib():
     def __init__(self, _period = '1d'):
         pass
 
-    def algo(self, context, algo_ratio, portfolio_value):
+    def algo(self, context, algo_ratio, total_value):
         '''
         FFScore algorithms
         输入参数：FFScore_ratio, protfolio_value
@@ -88,7 +88,7 @@ class FFScore_lib():
         equity_ratio, bonds_ratio = g.quantlib.fun_assetAllocationSystem(stock_list, context.moneyfund, statsDate)
 
         # 根据预设的风险敞口，计算交易时的比例
-        trade_ratio = g.quantlib.fun_calPosition(equity_ratio, bonds_ratio, algo_ratio, context.moneyfund, portfolio_value, statsDate)
+        trade_ratio = g.quantlib.fun_calPosition(equity_ratio, bonds_ratio, algo_ratio, context.moneyfund, total_value, statsDate)
 
         return trade_ratio
 
@@ -363,7 +363,7 @@ class quantlib():
     
         return equity_ratio, bonds_ratio
 
-    def fun_calPosition(self, equity_ratio, bonds_ratio, algo_ratio, moneyfund, portfolio_value, statsDate=None):
+    def fun_calPosition(self, equity_ratio, bonds_ratio, algo_ratio, moneyfund, total_value, statsDate=None):
         # 简化，不调整
         trade_ratio = equity_ratio
 
@@ -372,7 +372,7 @@ class quantlib():
     def fun_do_trade(self, context, trade_ratio, moneyfund, trade_style):
     
         def __fun_tradeStock(context, curPrice, stock, ratio, trade_style):
-            total_value = context.portfolio.portfolio_value
+            total_value = context.portfolio.total_value
             if stock in moneyfund:
                 self.fun_tradeBond(context, stock, total_value * ratio)
             else:
@@ -392,7 +392,7 @@ class quantlib():
         trade_list = trade_ratio.keys()
         myholdstock = context.portfolio.positions.keys()
         stock_list = list(set(trade_list).union(set(myholdstock)))
-        total_value = context.portfolio.portfolio_value
+        total_value = context.portfolio.total_value
     
         # 已有仓位
         holdDict = {}
