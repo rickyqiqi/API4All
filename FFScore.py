@@ -31,6 +31,7 @@ def initialize(context):
     g.trade_stat = tradestat.trade_stat()
     
     g.maxrbstd = {}
+    g.exceptions = []
 
 def after_code_changed(context):
 
@@ -183,6 +184,7 @@ def market_open(context):
             dr3cur = (stock_price-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 if order_target_value(stock, 0) != None:
+                    g.exceptions.append({'stock': stock, 'stopvalue': stock_price, 'targetvalue': 0.0})
                     curr_data = get_current_data()
                     log.info('止损: %s（%s）' % (curr_data[stock].name, stock))
 
@@ -580,6 +582,8 @@ class FFScore_lib():
 
         stock_list = g.quantlib.unpaused(stock_list)
         stock_list = g.quantlib.remove_st(stock_list, statsDate)
+        
+        stock_list = g.quantlib.exceptions_remove(stock_list)
 
         return stock_list[0:8]
 
@@ -751,3 +755,29 @@ class quantlib():
             set_order_cost(OrderCost(open_tax=0, close_tax=0, open_commission=0, close_commission=0, close_today_commission=0, min_commission=0), type='fund')
         else:
             set_order_cost(OrderCost(open_tax=0, close_tax=0.001, open_commission=0.0003, close_commission=0.0003, close_today_commission=0, min_commission=5), type='stock')
+
+    def exceptions_remove(self, stocklist):
+        #更新排除之前被止盈止损的股票，允许其进入筛选备选股池
+        for dstock in g.exceptions :
+            stock_price = get_close_price(dstock['stock'], 1, '1m')
+            # 当前价格相对于之前止盈、止损价格的涨跌幅度
+            if (dstock['stopvalue'] != 0.0) and ((stock_price-dstock['stopvalue'])/dstock['stopvalue'] > 0.15):
+                g.exceptions.remove(dstock)
+            elif (dstock['targetvalue'] != 0.0) and ((stock_price-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
+                g.exceptions.remove(dstock)
+
+        newlist = []
+        for s in stocklist:
+            #排除之前被止盈止损的股票
+            skipit = False
+            for dstock in g.exceptions :
+                if dstock['stock'] == s :
+                    skipit = True
+                    break
+            if skipit:
+                log.info('排除之前被止盈止损的股票: %s' % (s))
+                continue
+            
+            newlist.append(s)
+
+        return newlist
