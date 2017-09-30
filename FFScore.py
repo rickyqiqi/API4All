@@ -8,6 +8,7 @@ import pandas
 import datetime as dt
 import talib as tl
 import pandas as pd
+import tradestat
 
 def initialize(context):
     #用沪深 300 做回报基准
@@ -26,6 +27,9 @@ def initialize(context):
     # 收盘后运行
     run_daily(after_market_close, time='after_close')
 
+    # 加载统计模块
+    g.trade_stat = tradestat.trade_stat()
+
 def after_code_changed(context):
 
     # initialize 运行机制多变和复杂，所有变量都挪到 after_code_changed 里
@@ -41,8 +45,10 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'index_in_risk', False)
     # 指数布林线是否强势区域
     g.quantlib.fun_set_var(context, 'index_in_strong_tone', False)
-    # 是否卖出股票
-    g.quantlib.fun_set_var(context, 'sell_stock', False)
+    # 卖出股票信号
+    g.quantlib.fun_set_var(context, 'sell_stock_signal', False)
+    # 执行清仓操作
+    g.quantlib.fun_set_var(context, 'clear_positions', False)
 
     # 分配策略的市值比例
     context.FFScore_ratio = 1.0
@@ -62,6 +68,8 @@ def before_market_open(context):
 
 ## 收盘后运行函数  
 def after_market_close(context):
+    log.info('##############################################################')
+    g.trade_stat.report(context)
     log.info('##############################################################\n\n')
 
 def bollinger_bands(codes, timeperiod=20, nbdevup=2, nbdevdn=2):
@@ -129,7 +137,7 @@ def market_open(context):
         if not context.index_in_strong_tone:
             # 指数进入风险区域
             context.index_in_risk = True
-            context.sell_stock = True
+            context.sell_stock_signal = True
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("强势转为弱势区域")
@@ -146,7 +154,7 @@ def market_open(context):
         if context.index_in_strong_tone:
             # 指数进入非风险区域
             context.index_in_risk = False
-            context.sell_stock = False
+            context.sell_stock_signal = False
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("弱势转为强势区域")
@@ -158,26 +166,26 @@ def market_open(context):
             log.info("弱势区域进入布林线下轨下方")
 
     # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
-    if not context.sell_stock and context.index_in_risk and indexprice < middleupperlimit:
+    if not context.sell_stock_signal and context.index_in_risk and indexprice < middleupperlimit:
         log.info("风险区域且回归至布林线中轨上沿阈值以下")
-        context.sell_stock = True
+        context.sell_stock_signal = True
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
-    elif context.sell_stock and not context.index_in_risk and indexprice > middlelowerlimit:
+    elif context.sell_stock_signal and not context.index_in_risk and indexprice > middlelowerlimit:
         log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-        context.sell_stock = False
+        context.sell_stock_signal = False
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
-    elif not context.sell_stock and not context.index_in_risk and indexprice <= middlelowerlimit:
+    elif not context.sell_stock_signal and not context.index_in_risk and indexprice <= middlelowerlimit:
         log.info("非风险区域且回归至布林线中轨下沿阈值以下")
-        context.sell_stock = True
+        context.sell_stock_signal = True
     # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
-    elif context.sell_stock and context.index_in_risk and indexprice >= middleupperlimit:
+    elif context.sell_stock_signal and context.index_in_risk and indexprice >= middleupperlimit:
         log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-        context.sell_stock = False
+        context.sell_stock_signal = False
 
     # 允许调仓标记
-    clear_positions = context.sell_stock
+    clear_positions = context.sell_stock_signal
     # 指数值位于布林线下轨上沿且仓位为空
-    if context.portfolio.positions_value <= 0 and not context.sell_stock:
+    if context.portfolio.positions_value <= 0 and not context.sell_stock_signal:
         # 获取指数n日内的最低价
         close_data = attribute_history(context.banchmark, 3, '1d', ['low'])
         lowprice = close_data['low'].min()
@@ -188,7 +196,7 @@ def market_open(context):
             # 允许买入
             clear_positions = False
     # 指数值位于布林线上轨上沿且仓位非空
-    elif context.portfolio.positions_value > 0 and context.sell_stock:
+    elif context.portfolio.positions_value > 0 and context.sell_stock_signal:
         # 获取指数n日内的最高价
         close_data = attribute_history(context.banchmark, 3, '1d', ['high'])
         highprice = close_data['high'].max()
@@ -198,9 +206,15 @@ def market_open(context):
         if not g.newhighprice:
             # 清仓
             clear_positions = True
-            log.info("==> 清仓，卖出所有股票")
 
-    if clear_positions:
+    if context.clear_positions != clear_positions:
+        context.clear_positions = clear_positions
+        if context.clear_positions:
+            log.info("==> 清仓，卖出所有股票")
+        else:
+            log.info("==> 允许买入或调仓")
+
+    if context.clear_positions:
         context.stock_list = []
         position_ratio = {}
         for stock in context.portfolio.positions.keys():
@@ -642,7 +656,12 @@ class quantlib():
 
     def fun_trade(self, context, stock, value):
         self.fun_setCommission(context, stock)
-        order_target_value(stock, value)
+        position = context.portfolio.positions[stock]
+        order = order_target_value(stock, value)
+        if order != None and value == 0:
+            if order.filled > 0:
+                # 只要有成交，无论全部成交还是部分成交，则统计盈亏
+                g.trade_stat.watch(stock, order.filled, position.avg_cost, position.price)
 
     def fun_setCommission(self, context, stock):
         if stock in context.moneyfund:
