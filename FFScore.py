@@ -100,6 +100,18 @@ def bollinger_bands(codes, timeperiod=20, nbdevup=2, nbdevdn=2):
         return pd.Series({"upper":u[-1],"middle":m[-1],"lower":l[-1]},name=xs.name)
     return df.apply(func).T
 
+def sell_all_stocks(context):
+    context.stock_list = []
+    position_ratio = {}
+    for stock in context.portfolio.positions.keys():
+        position_ratio[stock] = 0
+    context.position_ratio = position_ratio
+    # 调仓，执行交易
+    trade_style = False    # True 会交易进行类似 100股的买卖，False 则只有在仓位变动 >25% 的时候，才产生交易
+    if context.hold_periods == context.hold_cycle:
+        trade_style = True
+    g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
+
 # 获取前n个单位时间当时的收盘价
 def get_close_price(security, n, unit='1d'):
     return attribute_history(security, n, unit, ('close'), True)['close'][0]
@@ -232,16 +244,7 @@ def market_open(context):
             log.info("==> 允许买入或调仓")
 
     if context.clear_positions:
-        context.stock_list = []
-        position_ratio = {}
-        for stock in context.portfolio.positions.keys():
-            position_ratio[stock] = 0
-        context.position_ratio = position_ratio
-        # 调仓，执行交易
-        trade_style = False    # True 会交易进行类似 100股的买卖，False 则只有在仓位变动 >25% 的时候，才产生交易
-        if context.hold_periods == context.hold_cycle:
-            trade_style = True
-        g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
+        sell_all_stocks(context)
 
     # 判断是否允许调仓且到达调仓每日时间
     elif context.current_dt.hour == 10 and context.current_dt.minute == 30:
