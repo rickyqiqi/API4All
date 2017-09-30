@@ -29,6 +29,8 @@ def initialize(context):
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
+    
+    g.maxrbstd = {}
 
 def after_code_changed(context):
 
@@ -61,6 +63,9 @@ def after_code_changed(context):
 
 ## 开盘前运行函数     
 def before_market_open(context):
+    # 计算并记录当日个股250天内最大的3日涨幅及能承受的最大跌幅
+    g.maxrbstd = update_maxr_bstd(context)
+
     # 当日是否出现新最低价
     g.newlowprice = False
     # 当日是否出现新最高价
@@ -112,6 +117,37 @@ def sell_all_stocks(context):
         trade_style = True
     g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
 
+def update_maxr_bstd(context):
+    maxrbstd = {}
+    for stock in context.portfolio.positions.keys():
+        # maxd = 个股250天内最大的3日跌幅
+        # avgd = 个股250天内平均的3日跌幅
+        # bstd = (maxd+avgd)/2, 此bstd即为个股在持仓3天内，能承受的最大跌幅
+        # maxr = 个股250天内最大的3日涨幅，个股盈利超过其历史值maxr的时候，则立刻清仓止盈
+        h = attribute_history(stock, 250, unit='1d', fields=('close', 'high', 'low'), skip_paused=True)
+        maxr = 0.00
+        maxd = 0.00
+        avgd = 0.00
+        dcount = 0
+        for i in range(1, len(h)-3):
+            # 个股连续3日涨跌幅
+            dr3days = 0.00
+            if (not isnan(h.close[i+2])) and (not isnan(h.close[i-1])):
+                dr3days = (h.close[i+2]-h.close[i-1])/h.close[i-1]
+            if dr3days > maxr:
+                maxr = dr3days
+            if dr3days < maxd:
+                maxd = dr3days
+            if dr3days < 0:
+                avgd += dr3days
+                dcount += 1
+        if dcount > 0 :
+            avgd = avgd/dcount
+        bstd = (maxd+avgd)/2
+
+        maxrbstd[stock] = {'maxr': maxr, 'bstd': bstd}
+    return maxrbstd
+
 # 获取前n个单位时间当时的收盘价
 def get_close_price(security, n, unit='1d'):
     return attribute_history(security, n, unit, ('close'), True)['close'][0]
@@ -134,6 +170,21 @@ def market_open(context):
         else:
             ret8 = 0
         record(index2=ret2, index8=ret8)
+
+    # 检查止损条件，并操作股票
+    stockscrashed = 0
+    org_position_stocks = context.portfolio.positions.keys()
+    for stock in org_position_stocks:
+        if context.portfolio.positions[stock].sellable_amount > 0:
+            # 对当天下跌幅度过大的股票进行计数统计
+            #if isStockBearish(stock, data, 5, 0.05, 0.02) :
+            stock_price = get_close_price(stock, 1, '1m')
+            # 当前价格超出止盈止损值，则卖出该股票
+            dr3cur = (stock_price-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
+            if dr3cur <= g.maxrbstd[stock]['bstd']:
+                if order_target_value(stock, 0) != None:
+                    curr_data = get_current_data()
+                    log.info('止损: %s（%s）' % (curr_data[stock].name, stock))
 
     indexprice = get_close_price(context.banchmark, 1, '1m')
 
@@ -275,6 +326,7 @@ def market_open(context):
         if context.hold_periods == context.hold_cycle:
             trade_style = True
         g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
+        g.maxrbstd = update_maxr_bstd(context)
 
 class FFScore_lib():
 
@@ -684,10 +736,15 @@ class quantlib():
         if value == 0:
             position = context.portfolio.positions[stock]
         order = order_target_value(stock, value)
-        if order != None and value == 0:
-            if order.filled > 0:
-                # 只要有成交，无论全部成交还是部分成交，则统计盈亏
-                g.trade_stat.watch(stock, order.filled, position.avg_cost, position.price)
+        if order != None:
+            curr_data = get_current_data()
+            if value == 0:
+                log.info('卖出: %s（%s）' % (curr_data[stock].name, stock))
+                if order.filled > 0:
+                    # 只要有成交，无论全部成交还是部分成交，则统计盈亏
+                    g.trade_stat.watch(stock, order.filled, position.avg_cost, position.price)
+            else:
+                log.info('买入: %s（%s）' % (curr_data[stock].name, stock))
 
     def fun_setCommission(self, context, stock):
         if stock in context.moneyfund:
