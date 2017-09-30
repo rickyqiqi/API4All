@@ -39,7 +39,7 @@ def initialize(context):
     # 股票价格字典
     g.maxrbstd = {}
     # 止损止盈列表
-    g.exceptions = []
+    g.exceptions = {}
     # 止损股票数
     g.stopstocks = 0
 
@@ -203,12 +203,12 @@ def market_open(context):
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 if order_target_value(stock, 0) != None:
                     g.stopstocks += 1
-                    g.exceptions.append({'stock': stock, 'stopvalue': stock_price, 'targetvalue': 0.0})
+                    g.exceptions[stock] = {'stopvalue': stock_price, 'targetvalue': 0.0}
                     curr_data = get_current_data()
                     log.info('止损: %s（%s）' % (curr_data[stock].name, stock))
 
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
-    if (len(org_position_stocks) != 0) and (stockscrashed*4.0/3 >= len(org_position_stocks) or g.stopstocks*2 >= len(org_position_stocks)):
+    if (len(org_position_stocks) > 2) and (stockscrashed*4.0/3 >= len(org_position_stocks) or g.stopstocks*2 >= len(org_position_stocks)):
         g.notrade = True
         if context.portfolio.positions_value > 0:
             #有仓位就清仓
@@ -785,26 +785,13 @@ class quantlib():
 
     def exceptions_remove(self, stocklist):
         #更新排除之前被止盈止损的股票，允许其进入筛选备选股池
-        for dstock in g.exceptions :
-            stock_price = get_close_price(dstock['stock'], 1, '1m')
+        for dstock in g.exceptions.keys() :
+            stock_price = get_close_price(dstock, 1, '1m')
             # 当前价格相对于之前止盈、止损价格的涨跌幅度
-            if (dstock['stopvalue'] != 0.0) and ((stock_price-dstock['stopvalue'])/dstock['stopvalue'] > 0.15):
-                g.exceptions.remove(dstock)
-            elif (dstock['targetvalue'] != 0.0) and ((stock_price-dstock['targetvalue'])/dstock['targetvalue'] < -0.15):
-                g.exceptions.remove(dstock)
+            if (g.exceptions[dstock]['stopvalue'] != 0.0) and ((stock_price-g.exceptions[dstock]['stopvalue'])/g.exceptions[dstock]['stopvalue'] > 0.15):
+                g.exceptions.pop(dstock)
+            elif (g.exceptions[dstock]['targetvalue'] != 0.0) and ((stock_price-g.exceptions[dstock]['targetvalue'])/g.exceptions[dstock]['targetvalue'] < -0.15):
+                g.exceptions.pop(dstock)
 
-        newlist = []
-        for s in stocklist:
-            #排除之前被止盈止损的股票
-            skipit = False
-            for dstock in g.exceptions :
-                if dstock['stock'] == s :
-                    skipit = True
-                    break
-            if skipit:
-                log.info('排除之前被止盈止损的股票: %s' % (s))
-                continue
-            
-            newlist.append(s)
-
-        return newlist
+        log.info('排除之前被止盈止损的股票: %s' % (g.exceptions))
+        return [s for s in stocklist if not g.exceptions.has_key(s)]
