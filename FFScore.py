@@ -96,10 +96,6 @@ def bollinger_bands(codes, timeperiod=20, nbdevup=2, nbdevdn=2):
 def get_close_price(security, n, unit='1d'):
     return attribute_history(security, n, unit, ('close'), True)['close'][0]
 
-def getStockPrice(stock, interval):
-    h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
-    return h['close'].values[0]
-
 def market_open(context):
 
     indexprice = get_close_price(context.banchmark, 1, '1m')
@@ -126,65 +122,57 @@ def market_open(context):
     if last_index_status != context.index_in_strong_tone:
         log.info("之前 - %d, 现在 - %d" %(last_index_status, context.index_in_strong_tone))
 
-    hs2 = getStockPrice(context.banchmark, 20)
-    ret2 = (indexprice - hs2) / hs2
-    cmp2result = True
-    if ret2<=0.01:
-        if not context.sell_stock:
-            log.info('指数买入条件未满足，清仓')
-        context.sell_stock = True
-    else:
-        # 强势转为弱势区域
-        # 或强势区域进入布林线上轨上方
-        # 清仓
-        if not context.index_in_risk and last_index_status:
-            if not context.index_in_strong_tone:
-                # 指数进入风险区域
-                context.index_in_risk = True
-                context.sell_stock = True
-                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
-                log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
-                log.info("强势转为弱势区域")
-            elif indexprice >= upperlimit:
-                # 指数进入风险区域
-                context.index_in_risk = True
-                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
-                log.info("当前布林线上轨上沿阈值: %f, 指数: %f" % (upperlimit, indexprice))
-                log.info("强势区域进入布林线上轨上方")
-        # 弱势转为强势区域
-        # 或弱势区域进入布林线下轨下方
-        # 建仓
-        elif context.index_in_risk and not last_index_status:
-            if context.index_in_strong_tone:
-                # 指数进入非风险区域
-                context.index_in_risk = False
-                context.sell_stock = False
-                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
-                log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
-                log.info("弱势转为强势区域")
-            elif indexprice <= lowerlimit:
-                # 指数进入非风险区域
-                context.index_in_risk = False
-                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
-                log.info("当前布林线下轨下沿阈值: %f, 指数: %f" % (lowerlimit, indexprice))
-                log.info("弱势区域进入布林线下轨下方")
+    # 强势转为弱势区域
+    # 或强势区域进入布林线上轨上方
+    # 清仓
+    if not context.index_in_risk and last_index_status:
+        if not context.index_in_strong_tone:
+            # 指数进入风险区域
+            context.index_in_risk = True
+            context.sell_stock = True
+            log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+            log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
+            log.info("强势转为弱势区域")
+        elif indexprice >= upperlimit:
+            # 指数进入风险区域
+            context.index_in_risk = True
+            log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+            log.info("当前布林线上轨上沿阈值: %f, 指数: %f" % (upperlimit, indexprice))
+            log.info("强势区域进入布林线上轨上方")
+    # 弱势转为强势区域
+    # 或弱势区域进入布林线下轨下方
+    # 建仓
+    elif context.index_in_risk and not last_index_status:
+        if context.index_in_strong_tone:
+            # 指数进入非风险区域
+            context.index_in_risk = False
+            context.sell_stock = False
+            log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+            log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
+            log.info("弱势转为强势区域")
+        elif indexprice <= lowerlimit:
+            # 指数进入非风险区域
+            context.index_in_risk = False
+            log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+            log.info("当前布林线下轨下沿阈值: %f, 指数: %f" % (lowerlimit, indexprice))
+            log.info("弱势区域进入布林线下轨下方")
 
-        # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
-        if not context.sell_stock and context.index_in_risk and indexprice < middleupperlimit:
-            log.info("风险区域且回归至布林线中轨上沿阈值以下")
-            context.sell_stock = True
-        # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
-        elif context.sell_stock and not context.index_in_risk and indexprice > middlelowerlimit:
-            log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-            context.sell_stock = False
-        # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
-        elif not context.sell_stock and not context.index_in_risk and indexprice <= middlelowerlimit:
-            log.info("非风险区域且回归至布林线中轨下沿阈值以下")
-            context.sell_stock = True
-        # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
-        elif context.sell_stock and context.index_in_risk and indexprice >= middleupperlimit:
-            log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-            context.sell_stock = False
+    # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
+    if not context.sell_stock and context.index_in_risk and indexprice < middleupperlimit:
+        log.info("风险区域且回归至布林线中轨上沿阈值以下")
+        context.sell_stock = True
+    # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
+    elif context.sell_stock and not context.index_in_risk and indexprice > middlelowerlimit:
+        log.info("非风险区域且回归至布林线中轨下沿阈值以上")
+        context.sell_stock = False
+    # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
+    elif not context.sell_stock and not context.index_in_risk and indexprice <= middlelowerlimit:
+        log.info("非风险区域且回归至布林线中轨下沿阈值以下")
+        context.sell_stock = True
+    # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
+    elif context.sell_stock and context.index_in_risk and indexprice >= middleupperlimit:
+        log.info("非风险区域且回归至布林线中轨下沿阈值以上")
+        context.sell_stock = False
 
     # 允许调仓标记
     clear_positions = context.sell_stock
