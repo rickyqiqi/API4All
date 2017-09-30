@@ -6,6 +6,8 @@ import numpy as np
 import talib
 import pandas
 import datetime as dt
+import talib as tl
+import pandas as pd
 
 def initialize(context):
     #用沪深 300 做回报基准
@@ -17,7 +19,12 @@ def initialize(context):
     # 关闭部分log
     log.set_level('order', 'error')
 
-    run_daily(fun_main, '10:30')
+    # 开盘前运行
+    run_daily(before_market_open, time='before_open') 
+    # 开盘时运行
+    run_daily(market_open, time='every_bar')
+    # 收盘后运行
+    run_daily(after_market_close, time='after_close')
 
 def after_code_changed(context):
 
@@ -27,6 +34,16 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'hold_cycle', 21)
     g.quantlib.fun_set_var(context, 'hold_periods', 0)
     g.quantlib.fun_set_var(context, 'stock_list', [])
+    # '000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
+    # '159902.XSHE' #'399005.XSHE' #中小板指数
+    g.quantlib.fun_set_var(context, 'banchmark', '000300.XSHG')
+    # 指数是否处于风险区域
+    g.quantlib.fun_set_var(context, 'index_in_risk', False)
+    # 指数布林线是否强势区域
+    g.quantlib.fun_set_var(context, 'index_in_strong_tone', False)
+    # 是否卖出股票
+    g.quantlib.fun_set_var(context, 'sell_stock', False)
+
     # 分配策略的市值比例
     context.FFScore_ratio = 1.0
 
@@ -36,35 +53,206 @@ def after_code_changed(context):
     # 上市不足 60 天的剔除掉
     context.moneyfund = g.quantlib.fun_delNewShare(context, moneyfund, 60)
 
-def fun_main(context):
+## 开盘前运行函数     
+def before_market_open(context):
+    # 当日是否出现新最低价
+    g.newlowprice = False
+    # 当日是否出现新最高价
+    g.newhighprice = False
 
-    # 引用 lib
-    g.FFScore  = FFScore_lib()
+## 收盘后运行函数  
+def after_market_close(context):
+    log.info('##############################################################\n\n')
 
-    # 检查是否需要调仓
-    rebalance_flag, context.hold_periods, msg = \
-        g.quantlib.fun_needRebalance('策略', context.stock_list, \
-            context.hold_periods, context.hold_cycle)
+def bollinger_bands(codes, timeperiod=20, nbdevup=2, nbdevdn=2):
+    '''
+            多股票布林带
+    依赖库：
+        import talib as tl
+        import pandas as pd
+    参数：
+        codes: 股票代码列表
+        timeperiod: 滑动窗口长度
+        nbdevup: 上边带标准差倍数
+        nbdevdn: 下边带标准差倍数
+    返回：
+        DataFrame:  index: codes;  columns: ['lower','middle', 'upper']
+    范例：
+        df = bollinger_bands(['000001.XSHG','000016.XSHG','399333.XSHE'])
+        print df.lower['000016.XSHG']
+        print df
+    '''
+    
+    if isinstance(codes, str):
+        codes = [codes]
+    #df = get_price(codes, end_date='2017-05-26', frequency='daily', fields='close', count=timeperiod*2)['close']
+    df = history(timeperiod*2, '1d', 'close' , codes, skip_paused=True)
+    def func(xs): 
+        u, m, l = tl.BBANDS(xs.values, timeperiod, nbdevup, nbdevdn)
+        return pd.Series({"upper":u[-1],"middle":m[-1],"lower":l[-1]},name=xs.name)
+    return df.apply(func).T
 
-    if rebalance_flag:
-        statsDate = context.current_dt.date()
+# 获取前n个单位时间当时的收盘价
+def get_close_price(security, n, unit='1d'):
+    return attribute_history(security, n, unit, ('close'), True)['close'][0]
 
-        # 计算策略的持仓
-        position_ratio = g.FFScore.algo(context, context.FFScore_ratio, context.portfolio.total_value)
+def getStockPrice(stock, interval):
+    h = attribute_history(stock, interval, unit='1d', fields=('close'), skip_paused=True)
+    return h['close'].values[0]
 
-        context.stock_list = position_ratio.keys()
+def market_open(context):
 
-        # 卖掉已有且不在待购清单里的股票
+    indexprice = get_close_price(context.banchmark, 1, '1m')
+
+    # 计算对比标杆指数布林线参数
+    df = bollinger_bands([context.banchmark])
+    # 布林线上轨上沿阈值
+    upperlimit = (df.upper[0] + (df.upper[0] - df.middle[0]) / 5)
+    # 布林线下轨下沿阈值
+    lowerlimit = (df.lower[0] - (df.middle[0] - df.lower[0]) / 5)
+    # 布林线中轨上沿阈值
+    middleupperlimit = (df.middle[0] + (df.upper[0] - df.middle[0]) / 5)
+    # 布林线中轨下沿阈值
+    middlelowerlimit = (df.middle[0] - (df.middle[0] - df.lower[0]) / 5)
+
+    # 记录上一次指数强势状态
+    last_index_status = context.index_in_strong_tone
+    # 计算指数强弱
+    if context.index_in_strong_tone and indexprice < middlelowerlimit:
+        context.index_in_strong_tone = False
+    elif not context.index_in_strong_tone and indexprice > middleupperlimit:
+        context.index_in_strong_tone = True
+
+    if last_index_status != context.index_in_strong_tone:
+        log.info("之前 - %d, 现在 - %d" %(last_index_status, context.index_in_strong_tone))
+
+    hs2 = getStockPrice(context.banchmark, 20)
+    ret2 = (indexprice - hs2) / hs2
+    cmp2result = True
+    if ret2<=0.01:
+        if not context.sell_stock:
+            log.info('指数买入条件未满足，清仓')
+        context.sell_stock = True
+    else:
+        # 强势转为弱势区域
+        # 或强势区域进入布林线上轨上方
+        # 清仓
+        if not context.index_in_risk and last_index_status:
+            if not context.index_in_strong_tone:
+                # 指数进入风险区域
+                context.index_in_risk = True
+                context.sell_stock = True
+                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+                log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
+                log.info("强势转为弱势区域")
+            elif indexprice >= upperlimit:
+                # 指数进入风险区域
+                context.index_in_risk = True
+                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+                log.info("当前布林线上轨上沿阈值: %f, 指数: %f" % (upperlimit, indexprice))
+                log.info("强势区域进入布林线上轨上方")
+        # 弱势转为强势区域
+        # 或弱势区域进入布林线下轨下方
+        # 建仓
+        elif context.index_in_risk and not last_index_status:
+            if context.index_in_strong_tone:
+                # 指数进入非风险区域
+                context.index_in_risk = False
+                context.sell_stock = False
+                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+                log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
+                log.info("弱势转为强势区域")
+            elif indexprice <= lowerlimit:
+                # 指数进入非风险区域
+                context.index_in_risk = False
+                log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
+                log.info("当前布林线下轨下沿阈值: %f, 指数: %f" % (lowerlimit, indexprice))
+                log.info("弱势区域进入布林线下轨下方")
+
+        # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
+        if not context.sell_stock and context.index_in_risk and indexprice < middleupperlimit:
+            log.info("风险区域且回归至布林线中轨上沿阈值以下")
+            context.sell_stock = True
+        # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
+        elif context.sell_stock and not context.index_in_risk and indexprice > middlelowerlimit:
+            log.info("非风险区域且回归至布林线中轨下沿阈值以上")
+            context.sell_stock = False
+        # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
+        elif not context.sell_stock and not context.index_in_risk and indexprice <= middlelowerlimit:
+            log.info("非风险区域且回归至布林线中轨下沿阈值以下")
+            context.sell_stock = True
+        # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
+        elif context.sell_stock and context.index_in_risk and indexprice >= middleupperlimit:
+            log.info("非风险区域且回归至布林线中轨下沿阈值以上")
+            context.sell_stock = False
+
+    # 允许调仓标记
+    clear_positions = context.sell_stock
+    # 指数值位于布林线下轨上沿且仓位为空
+    if context.portfolio.positions_value <= 0 and not context.sell_stock:
+        # 获取指数n日内的最低价
+        close_data = attribute_history(context.banchmark, 3, '1d', ['low'])
+        lowprice = close_data['low'].min()
+        # 出现新最低价则当日直接不交易
+        if indexprice < lowprice:
+            g.newlowprice = True
+        if not g.newlowprice:
+            # 允许买入
+            clear_positions = False
+    # 指数值位于布林线上轨上沿且仓位非空
+    elif context.portfolio.positions_value > 0 and context.sell_stock:
+        # 获取指数n日内的最高价
+        close_data = attribute_history(context.banchmark, 3, '1d', ['high'])
+        highprice = close_data['high'].max()
+        # 出现新最高价则当日直接不交易
+        if indexprice > highprice:
+            g.newhighprice = True
+        if not g.newhighprice:
+            # 清仓
+            clear_positions = True
+            log.info("==> 清仓，卖出所有股票")
+
+    if clear_positions:
+        context.stock_list = []
+        position_ratio = {}
         for stock in context.portfolio.positions.keys():
-            if stock not in position_ratio:
-                position_ratio[stock] = 0
+            position_ratio[stock] = 0
         context.position_ratio = position_ratio
+        # 调仓，执行交易
+        trade_style = False    # True 会交易进行类似 100股的买卖，False 则只有在仓位变动 >25% 的时候，才产生交易
+        if context.hold_periods == context.hold_cycle:
+            trade_style = True
+        g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
 
-    # 调仓，执行交易
-    trade_style = False    # True 会交易进行类似 100股的买卖，False 则只有在仓位变动 >25% 的时候，才产生交易
-    if context.hold_periods == context.hold_cycle:
-        trade_style = True
-    g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
+    # 判断是否允许调仓且到达调仓每日时间
+    elif context.current_dt.hour == 10 and context.current_dt.minute == 30:
+        # 引用 lib
+        g.FFScore  = FFScore_lib()
+
+        # 检查是否需要调仓
+        rebalance_flag, context.hold_periods, msg = \
+            g.quantlib.fun_needRebalance('策略', context.stock_list, \
+                context.hold_periods, context.hold_cycle)
+
+        if rebalance_flag:
+            statsDate = context.current_dt.date()
+
+            # 计算策略的持仓
+            position_ratio = g.FFScore.algo(context, context.FFScore_ratio, context.portfolio.total_value)
+
+            context.stock_list = position_ratio.keys()
+
+            # 卖掉已有且不在待购清单里的股票
+            for stock in context.portfolio.positions.keys():
+                if stock not in position_ratio:
+                    position_ratio[stock] = 0
+            context.position_ratio = position_ratio
+
+        # 调仓，执行交易
+        trade_style = False    # True 会交易进行类似 100股的买卖，False 则只有在仓位变动 >25% 的时候，才产生交易
+        if context.hold_periods == context.hold_cycle:
+            trade_style = True
+        g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
 
 class FFScore_lib():
 
