@@ -29,9 +29,19 @@ def initialize(context):
 
     # 加载统计模块
     g.trade_stat = tradestat.trade_stat()
-    
+
+    # 当日是否出现新最低价
+    g.newlowprice = False
+    # 当日是否出现新最高价
+    g.newhighprice = False
+    # 当日不交易（已清仓）
+    g.notrade = False
+    # 股票价格字典
     g.maxrbstd = {}
+    # 止损止盈列表
     g.exceptions = []
+    # 止损股票数
+    g.stopstocks = 0
 
 def after_code_changed(context):
 
@@ -71,6 +81,8 @@ def before_market_open(context):
     g.newlowprice = False
     # 当日是否出现新最高价
     g.newhighprice = False
+    # 当日不交易（已清仓）
+    g.notrade = False
 
 ## 收盘后运行函数  
 def after_market_close(context):
@@ -172,21 +184,36 @@ def market_open(context):
             ret8 = 0
         record(index2=ret2, index8=ret8)
 
+    # 当日不交易（已清仓）
+    if g.notrade:
+        return
+
     # 检查止损条件，并操作股票
     stockscrashed = 0
     org_position_stocks = context.portfolio.positions.keys()
     for stock in org_position_stocks:
         if context.portfolio.positions[stock].sellable_amount > 0:
+            stock_price = get_close_price(stock, 1, '1m')
             # 对当天下跌幅度过大的股票进行计数统计
             #if isStockBearish(stock, data, 5, 0.05, 0.02) :
-            stock_price = get_close_price(stock, 1, '1m')
+            if stock_price  < 0.955*get_close_price(stock, 1) :
+                stockscrashed += 1
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (stock_price-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
                 if order_target_value(stock, 0) != None:
+                    g.stopstocks += 1
                     g.exceptions.append({'stock': stock, 'stopvalue': stock_price, 'targetvalue': 0.0})
                     curr_data = get_current_data()
                     log.info('止损: %s（%s）' % (curr_data[stock].name, stock))
+
+    # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
+    if (len(org_position_stocks) != 0) and (stockscrashed*4.0/3 >= len(org_position_stocks) or g.stopstocks*2 >= len(org_position_stocks)):
+        g.notrade = True
+        if context.portfolio.positions_value > 0:
+            #有仓位就清仓
+            log.info('多只股票达到止损线，清仓')
+            sell_all_stocks(context)
 
     indexprice = get_close_price(context.banchmark, 1, '1m')
 
