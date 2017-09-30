@@ -106,6 +106,23 @@ def get_close_price(security, n, unit='1d'):
 
 def market_open(context):
 
+    if context.run_params.type == 'sim_trade':
+        # 定期刷新指数曲线
+        hs2 = get_close_price(context.banchmark, 20)
+        hs8 = get_close_price('159902.XSHE', 20)
+        cp2 = get_close_price(context.banchmark, 1, '1m')
+        cp8 = get_close_price('159902.XSHE', 1, '1m')
+
+        if (not isnan(hs2)) and (not isnan(cp2)):
+            ret2 = (cp2 - hs2) / hs2
+        else:
+            ret2 = 0
+        if (not isnan(hs8)) and (not isnan(cp8)):
+            ret8 = (cp8 - hs8) / hs8
+        else:
+            ret8 = 0
+        record(index2=ret2, index8=ret8)
+
     indexprice = get_close_price(context.banchmark, 1, '1m')
 
     # 计算对比标杆指数布林线参数
@@ -509,7 +526,7 @@ class FFScore_lib():
         stock_list = g.quantlib.unpaused(stock_list)
         stock_list = g.quantlib.remove_st(stock_list, statsDate)
 
-        return stock_list
+        return stock_list[0:8]
 
 class quantlib():
     def __init__(self, _period = '1d'):
