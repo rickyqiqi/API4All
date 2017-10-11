@@ -180,12 +180,14 @@ def market_open(context):
         record(index2=ret2, index8=ret8)
 
     #根据小盘股指数状态切换指数基准
-    if ret8 < 0 and context.banchmark != '000300.XSHG':
-        context.banchmark = '000300.XSHG'
-        log.info('小盘股指数%f(<0)，切换基准指数为沪深300' % (ret8))
-    elif ret8 > 0.01 and context.banchmark != '399101.XSHE':
-        context.banchmark = '399101.XSHE'
-        log.info('小盘股指数%f(>0.01)，切换基准指数为中小板综指' % (ret8))
+    if ret8 < 0:
+        if context.banchmark != '000300.XSHG':
+            context.banchmark = '000300.XSHG'
+            log.info('小盘股指数%f(<0)，切换基准指数为沪深300' % (ret8))
+    elif ret8 > 0.01:
+        if context.banchmark != '399101.XSHE':
+            context.banchmark = '399101.XSHE'
+            log.info('小盘股指数%f(>0.01)，切换基准指数为中小板综指' % (ret8))
 
     # 当日不交易（已清仓）
     #if g.notrade:
