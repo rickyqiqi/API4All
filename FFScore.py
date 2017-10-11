@@ -9,6 +9,7 @@ import datetime as dt
 import talib as tl
 import pandas as pd
 import tradestat
+from datetime import datetime, date, time
 
 def initialize(context):
     #用沪深 300 做回报基准
@@ -56,6 +57,10 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'sell_stock_signal', False)
     # 执行清仓操作
     g.quantlib.fun_set_var(context, 'clear_positions', False)
+    # 上次清仓信号发出日期时间
+    g.quantlib.fun_set_var(context, 'sell_signal_time_elasped', 0)
+    # 回归强势持续时间
+    g.quantlib.fun_set_var(context, 'strong_tone_maintain_time', 0)
 
     # 分配策略的市值比例
     context.FFScore_ratio = 1.0
@@ -265,6 +270,7 @@ def market_open(context):
             # 指数进入风险区域
             context.index_in_risk = True
             context.sell_stock_signal = True
+            context.sell_signal_time_elasped = 0
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("强势转为弱势区域")
@@ -293,21 +299,50 @@ def market_open(context):
             log.info("弱势区域进入布林线下轨下方")
 
     # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
-    if not context.sell_stock_signal and context.index_in_risk and indexprice < middleupperlimit:
-        log.info("风险区域且回归至布林线中轨上沿阈值以下")
-        context.sell_stock_signal = True
+    if not context.sell_stock_signal and context.index_in_risk:
+        if indexprice < middleupperlimit:
+            log.info("风险区域且回归至布林线中轨上沿阈值以下")
+            context.sell_stock_signal = True
+            context.sell_signal_time_elasped = 0
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
-    elif context.sell_stock_signal and not context.index_in_risk and indexprice > middlelowerlimit:
-        log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-        context.sell_stock_signal = False
+    elif context.sell_stock_signal and not context.index_in_risk:
+        if indexprice > middlelowerlimit:
+            #log.info("%d, %d" % (context.sell_signal_time_elasped, context.strong_tone_maintain_time))
+            indexprice_avg = get_close_price(context.banchmark, 240, '1m')
+            rise_percent = (indexprice-indexprice_avg) / indexprice_avg
+            # 指数回归必须持续一段时间（上次清仓时间大于8天
+            # 或指数回归强势持续时间超过1天且上涨超过1%）
+            if context.sell_signal_time_elasped >= 60*4*8 \
+              or (context.strong_tone_maintain_time >= 240 and rise_percent > 0.01):
+                #print indexprice_avg, indexprice, rise_percent
+                log.info("非风险区域且回归至布林线中轨下沿阈值以上")
+                context.sell_stock_signal = False
+            context.strong_tone_maintain_time += 1
+        else:
+            context.strong_tone_maintain_time = 0
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
-    elif not context.sell_stock_signal and not context.index_in_risk and indexprice <= middlelowerlimit:
-        log.info("非风险区域且回归至布林线中轨下沿阈值以下")
-        context.sell_stock_signal = True
+    elif not context.sell_stock_signal and not context.index_in_risk:
+        if indexprice <= middlelowerlimit:
+            log.info("非风险区域且回归至布林线中轨下沿阈值以下")
+            context.sell_stock_signal = True
+            context.sell_signal_time_elasped = 0
+            context.strong_tone_maintain_time = 0
     # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
-    elif context.sell_stock_signal and context.index_in_risk and indexprice >= middleupperlimit:
-        log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-        context.sell_stock_signal = False
+    elif context.sell_stock_signal and context.index_in_risk:
+        if indexprice >= middleupperlimit:
+            #log.info("%d, %d" % (context.sell_signal_time_elasped, context.strong_tone_maintain_time))
+            indexprice_avg = get_close_price(context.banchmark, 240, '1m')
+            rise_percent = (indexprice-indexprice_avg) / indexprice_avg
+            # 指数回归必须持续一段时间（上次清仓时间大于8天
+            # 或指数回归强势持续时间超过1天且上涨超过1%）
+            if context.sell_signal_time_elasped >= 60*4*8 \
+              or (context.strong_tone_maintain_time >= 240 and rise_percent > 0.01):
+                #print indexprice_avg, indexprice, rise_percent
+                log.info("风险区域且回归至布林线中轨上沿阈值以上")
+                context.sell_stock_signal = False
+            context.strong_tone_maintain_time += 1
+        else:
+            context.strong_tone_maintain_time = 0
 
     # 允许调仓标记
     clear_positions = context.sell_stock_signal
@@ -374,6 +409,12 @@ def market_open(context):
             trade_style = True
         g.quantlib.fun_do_trade(context, context.position_ratio, context.moneyfund, trade_style)
         g.maxrbstd = update_maxr_bstd(context)
+
+    # 更新上次清仓信号发出至今的分钟数
+    time_now = context.current_dt.time()
+    if (time_now >= time(9, 30) and time_now <= time(11, 30)) \
+       or (time_now >= time(13, 00) and time_now <= time(15, 00)):
+        context.sell_signal_time_elasped += 1
 
 class FFScore_lib():
 
