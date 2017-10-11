@@ -46,8 +46,8 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'hold_periods', 0)
     g.quantlib.fun_set_var(context, 'stock_list', [])
     # '000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
-    # '159902.XSHE' #'399005.XSHE' #中小板指数
-    g.quantlib.fun_set_var(context, 'banchmark', '000300.XSHG')
+    # '159902.XSHE' #'399005.XSHE' #中小板指数 #399101.XSHE #中小板综指
+    g.quantlib.fun_set_var(context, 'banchmark', '399101.XSHE')
     # 指数是否处于风险区域
     g.quantlib.fun_set_var(context, 'index_in_risk', False)
     # 指数布林线是否强势区域
@@ -161,22 +161,31 @@ def get_close_price(security, n, unit='1d'):
 
 def market_open(context):
 
-    if context.run_params.type == 'sim_trade':
+    hs8 = get_close_price('159902.XSHE', 20)
+    cp8 = get_close_price('159902.XSHE', 1, '1m')
+    if (not isnan(hs8)) and (not isnan(cp8)):
+        ret8 = (cp8 - hs8) / hs8
+    else:
+        ret8 = 0
+
+    if context.run_params.type == 'sim_trade' or context.current_dt.minute % 30 == 0:
         # 定期刷新指数曲线
-        hs2 = get_close_price(context.banchmark, 20)
-        hs8 = get_close_price('159902.XSHE', 20)
-        cp2 = get_close_price(context.banchmark, 1, '1m')
-        cp8 = get_close_price('159902.XSHE', 1, '1m')
+        hs2 = get_close_price('000300.XSHG', 20)
+        cp2 = get_close_price('000300.XSHG', 1, '1m')
 
         if (not isnan(hs2)) and (not isnan(cp2)):
             ret2 = (cp2 - hs2) / hs2
         else:
             ret2 = 0
-        if (not isnan(hs8)) and (not isnan(cp8)):
-            ret8 = (cp8 - hs8) / hs8
-        else:
-            ret8 = 0
         record(index2=ret2, index8=ret8)
+
+    #根据小盘股指数状态切换指数基准
+    if ret8 < 0 and context.banchmark != '000300.XSHG':
+        context.banchmark = '000300.XSHG'
+        log.info('小盘股指数%f(<0)，切换基准指数为沪深300' % (ret8))
+    elif ret8 > 0.01 and context.banchmark != '399101.XSHE':
+        context.banchmark = '399101.XSHE'
+        log.info('小盘股指数%f(>0.01)，切换基准指数为中小板综指' % (ret8))
 
     # 当日不交易（已清仓）
     #if g.notrade:
@@ -232,6 +241,19 @@ def market_open(context):
 
     if last_index_status != context.index_in_strong_tone:
         log.info("之前 - %d, 现在 - %d" %(last_index_status, context.index_in_strong_tone))
+
+    #indexprice300 = get_close_price('000300.XSHG', 1, '1m')
+
+    # 计算对比标杆指数布林线参数
+    #df300 = bollinger_bands(['000300.XSHG'])
+    # 布林线上轨上沿阈值
+    #upperlimit300 = (df300.upper[0] + (df300.upper[0] - df300.middle[0]) / 5)
+    # 布林线下轨下沿阈值
+    #lowerlimit300 = (df300.lower[0] - (df300.middle[0] - df300.lower[0]) / 5)
+    # 布林线中轨上沿阈值
+    #middleupperlimit300 = (df300.middle[0] + (df300.upper[0] - df300.middle[0]) / 5)
+    # 布林线中轨下沿阈值
+    #middlelowerlimit300 = (df300.middle[0] - (df300.middle[0] - df300.lower[0]) / 5)
 
     # 强势转为弱势区域
     # 或强势区域进入布林线上轨上方
