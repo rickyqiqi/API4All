@@ -398,7 +398,8 @@ class FFScore_lib():
         df = df.reset_index(drop = True)
         df = df[df.pb_ratio > 0]
         df = df.reset_index(drop = True)
-        df = df[0:int(len(df)*0.05)]  #股票太多，所以变更了比例
+        #df = df[0:int(len(df)*0.05)]  #股票太多，所以变更了比例
+        df = df[0:int(len(df))]
         stock_list = list(df['code'])
 
         #2) 盈利水平打分
@@ -606,7 +607,21 @@ class FFScore_lib():
         
         stock_list = g.quantlib.exceptions_remove(stock_list)
 
-        return stock_list[0:8]
+        q = query(
+            valuation.code,
+            ).filter(
+            valuation.code.in_(stock_list)
+        ).order_by(
+            # 按市值升序排列
+            valuation.market_cap.asc()
+        ).limit(
+            # 最多返回8个
+            8
+        )
+        df = get_fundamentals(q)
+        stock_list = df.code.values.tolist()
+        #return stock_list[0:8]
+        return stock_list
 
 class quantlib():
     def __init__(self, _period = '1d'):
