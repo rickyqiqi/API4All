@@ -615,8 +615,8 @@ class FFScore_lib():
             # 按市值升序排列
             valuation.market_cap.asc()
         ).limit(
-            # 最多返回8个
-            8
+            # 最多返回4个
+            4
         )
         df = get_fundamentals(q)
         stock_list = df.code.values.tolist()
