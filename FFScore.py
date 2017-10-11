@@ -269,8 +269,8 @@ def market_open(context):
         if not context.index_in_strong_tone:
             # 指数进入风险区域
             context.index_in_risk = True
-            context.sell_stock_signal = True
-            context.sell_signal_time_elasped = 0
+            #context.sell_stock_signal = True
+            #context.sell_signal_time_elasped = 0
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("强势转为弱势区域")
@@ -287,7 +287,7 @@ def market_open(context):
         if context.index_in_strong_tone:
             # 指数进入非风险区域
             context.index_in_risk = False
-            context.sell_stock_signal = False
+            #context.sell_stock_signal = False
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("弱势转为强势区域")
@@ -326,7 +326,6 @@ def market_open(context):
             log.info("非风险区域且回归至布林线中轨下沿阈值以下")
             context.sell_stock_signal = True
             context.sell_signal_time_elasped = 0
-            context.strong_tone_maintain_time = 0
     # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
     elif context.sell_stock_signal and context.index_in_risk:
         if indexprice >= middleupperlimit:
