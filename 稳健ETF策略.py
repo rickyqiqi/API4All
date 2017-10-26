@@ -47,6 +47,7 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'hold_cycle', 21)
     g.quantlib.fun_set_var(context, 'hold_periods', 0)
     g.quantlib.fun_set_var(context, 'stock_list', [])
+    g.quantlib.fun_set_var(context, 'stock_limit', 4)
     # '000300.XSHG' #沪深300指数 #'000016.XSHG' #上证50指数
     # '159902.XSHE' #'399005.XSHE' #中小板指数 #399101.XSHE #中小板综指
     g.quantlib.fun_set_var(context, 'banchmark', '000300.XSHG')
@@ -54,14 +55,21 @@ def after_code_changed(context):
     g.quantlib.fun_set_var(context, 'index_in_risk', False)
     # 指数布林线是否强势区域
     g.quantlib.fun_set_var(context, 'index_in_strong_tone', False)
-    # 卖出股票信号
-    g.quantlib.fun_set_var(context, 'sell_stock_signal', False)
+    # 指数卖出股票信号
+    g.quantlib.fun_set_var(context, 'index_sell_signal', False)
     # 执行清仓操作
     g.quantlib.fun_set_var(context, 'clear_positions', False)
     # 上次清仓信号发出日期时间
     g.quantlib.fun_set_var(context, 'sell_signal_time_elasped', 0)
     # 回归强势持续时间
     g.quantlib.fun_set_var(context, 'strong_tone_maintain_time', 0)
+
+    # 股票是否处于风险区域
+    g.quantlib.fun_set_var(context, 'stock_in_risk', {})
+    # 股票布林线是否强势区域
+    g.quantlib.fun_set_var(context, 'stock_in_strong_tone', {})
+    # 股票卖出信号
+    g.quantlib.fun_set_var(context, 'stock_sell_signal', {})
 
     # 分配策略的市值比例
     context.FFScore_ratio = 1.0
@@ -72,7 +80,7 @@ def after_code_changed(context):
     # 上市不足 60 天的剔除掉
     context.moneyfund = g.quantlib.fun_delNewShare(context, moneyfund, 60)
     
-    context.index_in_strong_tone, context.index_in_risk, context.sell_stock_signal = predict_stock_trend(context, context.banchmark)
+    context.index_in_strong_tone, context.index_in_risk, context.index_sell_signal = predict_stock_trend(context, context.banchmark)
 
 ## 开盘前运行函数     
 def before_market_open(context):
@@ -85,6 +93,21 @@ def before_market_open(context):
     g.newhighprice = False
     # 当日不交易（已清仓）
     #g.notrade = False
+    
+    context.stock_in_strong_tone = {}
+    context.stock_in_risk = {}
+    context.stock_sell_signal = {}
+    # 计算当日开盘前有仓位股票的布林线趋势
+    for stock in context.portfolio.positions.keys():
+        context.stock_in_strong_tone[stock], context.stock_in_risk[stock], context.stock_sell_signal[stock] = predict_stock_trend(context, stock)
+    # 计算当日开盘前之前止盈止损股票的布林线趋势
+    #for stock in g.exceptions.keys() :
+    #    stock_in_strong_tone, stock_in_risk, stock_sell_signal = predict_stock_trend(context, stock)
+        # 当前趋势进入非股票卖出信号状态
+    #    if not stock_sell_signal:
+    #        g.exceptions.pop(stock)
+    #        curr_data = get_current_data()
+    #        log.info('%s（%s）股价恢复，排除出止盈止损股票列表' % (curr_data[stock].name, stock))
 
 ## 收盘后运行函数  
 def after_market_close(context):
@@ -173,12 +196,13 @@ def get_close_price(security, n, unit='1d'):
 #      stock: 股票代码字串
 #      stock_in_strong_tone: 股票布林线是否强势区域
 #      stock_in_risk: 股票是否处于风险区域
-#      sell_stock_signal: 股票卖出股票信号
+#      stock_sell_signal: 股票卖出股票信号
+#      days_predict: 预测趋势共使用之前多少天的数据
 # 返回：
 #      True - 强势
 #      False - 弱势
-def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_risk = False, sell_stock_signal = False):
-    def trend_calculate(date, upperlimit, lowerlimit, middleupperlimit, middlelowerlimit, stock_in_strong_tone, stock_in_risk, sell_stock_signal):
+def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_risk = False, stock_sell_signal = False, days_predict = 60, log_bar_off = False):
+    def trend_calculate(stock, stockname, date, upperlimit, lowerlimit, middleupperlimit, middlelowerlimit, stock_in_strong_tone, stock_in_risk, stock_sell_signal):
         # 记录上一次指数强势状态
         stock_last_status = stock_in_strong_tone
         # 计算指数强弱
@@ -188,7 +212,7 @@ def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_r
             stock_in_strong_tone = True
 
         if stock_last_status != stock_in_strong_tone:
-            log.info("== (%s) 之前 - %d, 现在 - %d" % (date.strftime('%Y/%m/%d'), stock_last_status, stock_in_strong_tone))
+            log.info("== (%s %s[%s]) 之前 - %d, 现在 - %d" % (date.strftime('%Y/%m/%d'), stockname, stock, stock_last_status, stock_in_strong_tone))
 
         # 强势转为弱势区域
         # 或强势区域进入布林线上轨上方
@@ -197,14 +221,14 @@ def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_r
             if not stock_in_strong_tone:
                 # 指数进入风险区域
                 stock_in_risk = True
-                sell_stock_signal = True
-                log.info("== (%s) 当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'),middleupperlimit, middlelowerlimit, stock_price))
-                log.info("== (%s) 强势转为弱势区域" % (date.strftime('%Y/%m/%d')))
+                stock_sell_signal = True
+                log.info("== (%s %s[%s]) 当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'), stockname, stock, middleupperlimit, middlelowerlimit, stock_price))
+                log.info("== (%s %s[%s]) 强势转为弱势区域" % (date.strftime('%Y/%m/%d'), stockname, stock))
             elif stock_price >= upperlimit:
                 # 指数进入风险区域
                 stock_in_risk = True
-                log.info("== (%s) 当前布林线上轨上沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'),upperlimit, stock_price))
-                log.info("== (%s) 强势区域进入布林线上轨上方" % (date.strftime('%Y/%m/%d')))
+                log.info("== (%s %s[%s]) 当前布林线上轨上沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'), stockname, stock, upperlimit, stock_price))
+                log.info("== (%s %s[%s]) 强势区域进入布林线上轨上方" % (date.strftime('%Y/%m/%d'), stockname, stock))
         # 弱势转为强势区域
         # 或弱势区域进入布林线下轨下方
         # 建仓
@@ -212,42 +236,41 @@ def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_r
             if stock_in_strong_tone:
                 # 指数进入非风险区域
                 stock_in_risk = False
-                log.info("== (%s) 当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'),middleupperlimit, middlelowerlimit, stock_price))
-                log.info("== (%s) 弱势转为强势区域" % (date.strftime('%Y/%m/%d')))
+                log.info("== (%s %s[%s]) 当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'), stockname, stock, middleupperlimit, middlelowerlimit, stock_price))
+                log.info("== (%s %s[%s]) 弱势转为强势区域" % (stockname, stock, date.strftime('%Y/%m/%d')))
             elif stock_price <= lowerlimit:
                 # 指数进入非风险区域
                 stock_in_risk = False
-                log.info("== (%s) 当前布林线下轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'),lowerlimit, stock_price))
-                log.info("== (%s) 弱势区域进入布林线下轨下方" % (date.strftime('%Y/%m/%d')))
+                log.info("== (%s %s[%s]) 当前布林线下轨下沿阈值: %f, 股票/指数: %f" % (date.strftime('%Y/%m/%d'), stockname, stock, lowerlimit, stock_price))
+                log.info("== (%s %s[%s]) 弱势区域进入布林线下轨下方" % (date.strftime('%Y/%m/%d'), stockname, stock))
 
         # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
-        if not sell_stock_signal and stock_in_risk:
+        if not stock_sell_signal and stock_in_risk:
             if stock_price < middleupperlimit:
-                log.info("== (%s) 风险区域且回归至布林线中轨上沿阈值以下" % (date.strftime('%Y/%m/%d')))
-                sell_stock_signal = True
+                log.info("== (%s %s[%s]) 风险区域且回归至布林线中轨上沿阈值以下" % (date.strftime('%Y/%m/%d'), stockname, stock))
+                stock_sell_signal = True
         # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
-        elif sell_stock_signal and not stock_in_risk:
+        elif stock_sell_signal and not stock_in_risk:
             if stock_price > middlelowerlimit:
-                log.info("== (%s) 非风险区域且回归至布林线中轨下沿阈值以上" % (date.strftime('%Y/%m/%d')))
-                sell_stock_signal = False
+                log.info("== (%s %s[%s]) 非风险区域且回归至布林线中轨下沿阈值以上" % (date.strftime('%Y/%m/%d'), stockname, stock))
+                stock_sell_signal = False
         # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
-        elif not sell_stock_signal and not stock_in_risk:
+        elif not stock_sell_signal and not stock_in_risk:
             if stock_price <= middlelowerlimit:
-                log.info("== (%s) 非风险区域且回归至布林线中轨下沿阈值以下" % (date.strftime('%Y/%m/%d')))
-                sell_stock_signal = True
+                log.info("== (%s %s[%s]) 非风险区域且回归至布林线中轨下沿阈值以下" % (date.strftime('%Y/%m/%d'), stockname, stock))
+                stock_sell_signal = True
         # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
-        elif sell_stock_signal and stock_in_risk:
+        elif stock_sell_signal and stock_in_risk:
             if stock_price >= middleupperlimit:
-                log.info("== (%s) 风险区域且回归至布林线中轨上沿阈值以上" % (date.strftime('%Y/%m/%d')))
-                sell_stock_signal = False
+                log.info("== (%s %s[%s]) 风险区域且回归至布林线中轨上沿阈值以上" % (date.strftime('%Y/%m/%d'), stockname, stock))
+                stock_sell_signal = False
 
-        return stock_in_strong_tone, stock_in_risk, sell_stock_signal
+        return stock_in_strong_tone, stock_in_risk, stock_sell_signal
 
-    log.info("=======================================================")
+    if not log_bar_off:
+        log.info("=======================================================")
     curr_data = get_current_data()
-    log.info("== 根据股票/指数(%s[%s])前60个交易日数据计算股票趋势" % (curr_data[stock].name, stock))
 
-    days_predict = 60
     # 所有的交易日期
     trading_days = get_all_trade_days().tolist()
     date_tmp = context.current_dt.date()
@@ -275,12 +298,13 @@ def predict_stock_trend(context, stock, stock_in_strong_tone = False, stock_in_r
         else:
             stock_price = get_close_price(stock, 1, '1m')
 
-        stock_in_strong_tone, stock_in_risk, sell_stock_signal = trend_calculate(trading_days[date_index], upperlimit, lowerlimit, middleupperlimit, middlelowerlimit, stock_in_strong_tone, stock_in_risk, sell_stock_signal)
+        stock_in_strong_tone, stock_in_risk, stock_sell_signal = trend_calculate(stock, curr_data[stock].name, trading_days[date_index], upperlimit, lowerlimit, middleupperlimit, middlelowerlimit, stock_in_strong_tone, stock_in_risk, stock_sell_signal)
         # 后推一天
         date_index += 1
 
-    log.info("=======================================================")
-    return stock_in_strong_tone, stock_in_risk, sell_stock_signal
+    if not log_bar_off:
+        log.info("=======================================================")
+    return stock_in_strong_tone, stock_in_risk, stock_sell_signal
 
 def market_open(context):
 
@@ -315,11 +339,14 @@ def market_open(context):
             # 当前价格超出止盈止损值，则卖出该股票
             dr3cur = (stock_price-context.portfolio.positions[stock].avg_cost)/context.portfolio.positions[stock].avg_cost
             if dr3cur <= g.maxrbstd[stock]['bstd']:
+            # 当前股票布林线指数趋势为卖出指示，则卖出该股票
+            #context.stock_in_strong_tone[stock], context.stock_in_risk[stock], context.stock_sell_signal[stock] = predict_stock_trend(context, stock, context.stock_in_strong_tone[stock], context.stock_in_risk[stock], context.stock_sell_signal[stock], days_predict=1, log_bar_off=True)
+            #if context.stock_sell_signal[stock]:
                 if order_target_value(stock, 0) != None:
                     #g.stopstocks += 1
                     g.exceptions[stock] = {'stopvalue': stock_price, 'targetvalue': 0.0}
                     curr_data = get_current_data()
-                    log.info('止损: %s（%s）' % (curr_data[stock].name, stock))
+                    log.info('止盈止损: %s（%s）' % (curr_data[stock].name, stock))
 
     # 当天下跌幅度过大的股票超过一定比例，或者超过一半的所持股票止损，清仓观望
     #if (len(org_position_stocks) > 2) and (stockscrashed*4.0/3 >= len(org_position_stocks) or g.stopstocks*2 >= len(org_position_stocks)):
@@ -373,7 +400,7 @@ def market_open(context):
         if not context.index_in_strong_tone:
             # 指数进入风险区域
             context.index_in_risk = True
-            context.sell_stock_signal = True
+            context.index_sell_signal = True
             context.sell_signal_time_elasped = 0
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
@@ -391,7 +418,7 @@ def market_open(context):
         if context.index_in_strong_tone:
             # 指数进入非风险区域
             context.index_in_risk = False
-            #context.sell_stock_signal = False
+            #context.index_sell_signal = False
             log.info("当前布林线上轨: %f, 中轨: %f, 下轨: %f" % (df.upper[0], df.middle[0], df.lower[0]))
             log.info("当前布林线中轨上沿阈值: %f, 中轨下沿阈值: %f, 指数: %f" % (middleupperlimit, middlelowerlimit, indexprice))
             log.info("弱势转为强势区域")
@@ -403,13 +430,13 @@ def market_open(context):
             log.info("弱势区域进入布林线下轨下方")
 
     # 指数处于风险区域且回归至布林线中轨上沿阈值以下，则卖出股票
-    if not context.sell_stock_signal and context.index_in_risk:
+    if not context.index_sell_signal and context.index_in_risk:
         if indexprice < middleupperlimit:
             log.info("风险区域且回归至布林线中轨上沿阈值以下")
-            context.sell_stock_signal = True
+            context.index_sell_signal = True
             context.sell_signal_time_elasped = 0
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以上，则买入股票
-    elif context.sell_stock_signal and not context.index_in_risk:
+    elif context.index_sell_signal and not context.index_in_risk:
         if indexprice > middlelowerlimit:
             #log.info("%d, %d" % (context.sell_signal_time_elasped, context.strong_tone_maintain_time))
             indexprice_avg = get_close_price(context.banchmark, 240, '1m')
@@ -420,18 +447,18 @@ def market_open(context):
               or (context.strong_tone_maintain_time >= 240 and rise_percent > 0.01):
                 #print indexprice_avg, indexprice, rise_percent
                 log.info("非风险区域且回归至布林线中轨下沿阈值以上")
-                context.sell_stock_signal = False
+                context.index_sell_signal = False
             context.strong_tone_maintain_time += 1
         else:
             context.strong_tone_maintain_time = 0
     # 指数处于非风险区域且回归至布林线中轨下沿阈值以下，则卖出股票
-    elif not context.sell_stock_signal and not context.index_in_risk:
+    elif not context.index_sell_signal and not context.index_in_risk:
         if indexprice <= middlelowerlimit:
             log.info("非风险区域且回归至布林线中轨下沿阈值以下")
-            context.sell_stock_signal = True
+            context.index_sell_signal = True
             context.sell_signal_time_elasped = 0
     # 指数处于非风险区域且回归至布林线中轨上沿阈值以上，则买入股票
-    elif context.sell_stock_signal and context.index_in_risk:
+    elif context.index_sell_signal and context.index_in_risk:
         if indexprice >= middleupperlimit:
             #log.info("%d, %d" % (context.sell_signal_time_elasped, context.strong_tone_maintain_time))
             indexprice_avg = get_close_price(context.banchmark, 240, '1m')
@@ -442,15 +469,15 @@ def market_open(context):
               or (context.strong_tone_maintain_time >= 240 and rise_percent > 0.01):
                 #print indexprice_avg, indexprice, rise_percent
                 log.info("风险区域且回归至布林线中轨上沿阈值以上")
-                context.sell_stock_signal = False
+                context.index_sell_signal = False
             context.strong_tone_maintain_time += 1
         else:
             context.strong_tone_maintain_time = 0
 
     # 允许调仓标记
-    clear_positions = context.sell_stock_signal
+    clear_positions = context.index_sell_signal
     # 指数值位于布林线下轨上沿且仓位为空
-    if context.portfolio.positions_value <= 0 and not context.sell_stock_signal:
+    if context.portfolio.positions_value <= 0 and not context.index_sell_signal:
         # 获取指数n日内的最低价
         close_data = attribute_history(context.banchmark, 3, '1d', ['low'])
         lowprice = close_data['low'].min()
@@ -461,7 +488,7 @@ def market_open(context):
             # 允许买入
             clear_positions = False
     # 指数值位于布林线上轨上沿且仓位非空
-    elif context.portfolio.positions_value > 0 and context.sell_stock_signal:
+    elif context.portfolio.positions_value > 0 and context.index_sell_signal:
         # 获取指数n日内的最高价
         close_data = attribute_history(context.banchmark, 3, '1d', ['high'])
         highprice = close_data['high'].max()
@@ -794,10 +821,13 @@ class FFScore_lib():
         stock_list = []
         # 删除下跌趋势的股票
         for stock in df.code.values:
-            stock_in_strong_tone, stock_in_risk, sell_stock_signal = predict_stock_trend(context, stock)
-            if not sell_stock_signal:
+            stock_in_strong_tone, stock_in_risk, stock_sell_signal = predict_stock_trend(context, stock)
+            if not stock_sell_signal:
+                context.stock_in_strong_tone[stock] = stock_in_strong_tone
+                context.stock_in_risk[stock] = stock_in_risk
+                context.stock_sell_signal[stock] = stock_sell_signal
                 stock_list.append(stock)
-                if len(stock_list) >= 4:
+                if len(stock_list) >= context.stock_limit:
                     break
 
         return stock_list
